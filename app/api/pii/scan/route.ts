@@ -3,6 +3,9 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { extractText } from '@/lib/pii/ocr'
 import { detectPii } from '@/lib/pii/detect'
 
+export const runtime = 'nodejs'
+export const maxDuration = 30
+
 /**
  * POST /api/pii/scan
  * Accepts a file upload, runs OCR locally, detects PII,

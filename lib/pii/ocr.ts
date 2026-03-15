@@ -1,9 +1,11 @@
 /**
  * OCR module using tesseract.js for local text extraction.
  * Runs entirely in Node — no external API calls.
+ *
+ * Uses createWorker API to avoid Next.js worker bundling issues.
  */
 
-import Tesseract from 'tesseract.js'
+import { createWorker } from 'tesseract.js'
 
 export interface OcrResult {
   text: string
@@ -12,20 +14,22 @@ export interface OcrResult {
 }
 
 /**
- * Extract text from an image or PDF page using tesseract.js.
- * Supports PNG, JPG, WebP, and single-page PDFs (as images).
+ * Extract text from an image using tesseract.js.
+ * Supports PNG, JPG, WebP.
  */
 export async function extractText(
   imageBuffer: Buffer,
-  languages = 'nld+fra+eng'
+  languages = 'eng+fra+nld'
 ): Promise<OcrResult> {
-  const { data } = await Tesseract.recognize(imageBuffer, languages, {
-    logger: () => {},  // suppress progress logs
-  })
-
-  return {
-    text: data.text,
-    confidence: data.confidence,
-    language: languages,
+  const worker = await createWorker(languages)
+  try {
+    const { data } = await worker.recognize(imageBuffer)
+    return {
+      text: data.text,
+      confidence: data.confidence,
+      language: languages,
+    }
+  } finally {
+    await worker.terminate()
   }
 }
