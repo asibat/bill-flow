@@ -60,7 +60,7 @@ export async function findDuplicates(
     const cleanComm = bill.structured_comm.replace(/[+/\s]/g, '')
     const { data } = await supabase
       .from('bills')
-      .select('id, payee_name, amount, due_date, status, created_at')
+      .select('id, payee_name, amount, due_date, status, created_at, structured_comm')
       .eq('user_id', userId)
       .filter('structured_comm', 'neq', null)
       .limit(20)
