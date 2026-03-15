@@ -7,6 +7,7 @@ import { UploadDropzone } from '@/components/bills/UploadDropzone'
 import { ExtractionBanner } from '@/components/bills/ExtractionBanner'
 import { VendorMatchBanner } from '@/components/bills/VendorMatchBanner'
 import { BillFormFields } from '@/components/bills/BillFormFields'
+import { RedactionPreview } from '@/components/bills/RedactionPreview'
 import type { ExtractionResult, VendorMatch, BillFormData, UploadResponse } from '@/types'
 
 interface DuplicateInfo {
@@ -17,12 +18,30 @@ interface DuplicateInfo {
   status: string
 }
 
+interface PiiScanResult {
+  text: string
+  ocrConfidence: number
+  piiMatches: Array<{
+    type: string
+    value: string
+    start: number
+    end: number
+    replacement: string
+  }>
+  matchCount: number
+}
+
+type Step = 'upload' | 'redaction' | 'review'
+
 interface UploadFormProps {
   onBack: () => void
 }
 
 export function UploadForm({ onBack }: UploadFormProps) {
+  const [step, setStep] = useState<Step>('upload')
   const [uploading, setUploading] = useState(false)
+  const [scanning, setScanning] = useState(false)
+  const [extracting, setExtracting] = useState(false)
   const [reextracting, setReextracting] = useState(false)
   const [extraction, setExtraction] = useState<ExtractionResult | null>(null)
   const [storagePath, setStoragePath] = useState('')
@@ -31,11 +50,71 @@ export function UploadForm({ onBack }: UploadFormProps) {
   const [vendor, setVendor] = useState<VendorMatch | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [duplicates, setDuplicates] = useState<DuplicateInfo[] | null>(null)
+  const [piiScan, setPiiScan] = useState<PiiScanResult | null>(null)
   const router = useRouter()
 
   function applyExtraction(data: UploadResponse) {
     setExtraction(data.extraction)
-    setStoragePath(data.storage_path)
+    if (data.storage_path) setStoragePath(data.storage_path)
+    const formData: BillFormData = {}
+    for (const [key, value] of Object.entries(data.extraction)) {
+      formData[key] = value ?? ''
+    }
+    setForm(formData)
+    setVendor(data.vendor ?? null)
+    setStep('review')
+  }
+
+  async function handleUpload(file: File) {
+    setUploading(true)
+    setError(null)
+
+    try {
+      // Step 1: Store file first
+      const storeFd = new FormData()
+      storeFd.append('file', file)
+      const storeRes = await fetch('/api/upload', { method: 'POST', body: storeFd })
+      if (!storeRes.ok) {
+        const body = await storeRes.json().catch(() => ({}))
+        throw new Error(body.error || `Upload failed (${storeRes.status})`)
+      }
+      const storeData: UploadResponse = await storeRes.json()
+      setStoragePath(storeData.storage_path)
+
+      // Step 2: PII scan
+      setUploading(false)
+      setScanning(true)
+
+      const scanFd = new FormData()
+      scanFd.append('file', file)
+      const scanRes = await fetch('/api/pii/scan', { method: 'POST', body: scanFd })
+
+      if (scanRes.ok) {
+        const scanData: PiiScanResult = await scanRes.json()
+        if (scanData.matchCount > 0) {
+          setPiiScan(scanData)
+          // Also store the direct extraction for "Skip" path
+          applyExtractionSilent(storeData)
+          setStep('redaction')
+          return
+        }
+      }
+
+      // No PII found or scan failed — use direct extraction
+      applyExtraction(storeData)
+    } catch (err) {
+      console.error('Upload failed:', err)
+      setError(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
+      setUploading(false)
+      setScanning(false)
+    }
+  }
+
+  /** Store extraction data without changing step */
+  function applyExtractionSilent(data: UploadResponse) {
+    setExtraction(data.extraction)
+    if (data.storage_path) setStoragePath(data.storage_path)
     const formData: BillFormData = {}
     for (const [key, value] of Object.entries(data.extraction)) {
       formData[key] = value ?? ''
@@ -44,25 +123,32 @@ export function UploadForm({ onBack }: UploadFormProps) {
     setVendor(data.vendor ?? null)
   }
 
-  async function handleUpload(file: File) {
-    setUploading(true)
+  async function handleRedactionApproved(redactedText: string) {
+    setExtracting(true)
     setError(null)
     try {
-      const fd = new FormData()
-      fd.append('file', file)
-      const res = await fetch('/api/upload', { method: 'POST', body: fd })
+      const res = await fetch('/api/pii/extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ redactedText, storagePath }),
+      })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
-        throw new Error(body.error || `Upload failed (${res.status})`)
+        throw new Error(body.error || `Extraction failed (${res.status})`)
       }
       const data: UploadResponse = await res.json()
       applyExtraction(data)
     } catch (err) {
-      console.error('Upload failed:', err)
-      setError(err instanceof Error ? err.message : 'Upload failed')
+      setError(err instanceof Error ? err.message : 'Extraction failed')
+      setStep('review')
     } finally {
-      setUploading(false)
+      setExtracting(false)
     }
+  }
+
+  function handleSkipRedaction() {
+    // Use the already-extracted data from direct upload
+    setStep('review')
   }
 
   async function reextract() {
@@ -79,10 +165,14 @@ export function UploadForm({ onBack }: UploadFormProps) {
   }
 
   function resetUpload() {
+    setStep('upload')
     setExtraction(null)
     setStoragePath('')
     setForm({})
     setVendor(null)
+    setPiiScan(null)
+    setDuplicates(null)
+    setError(null)
   }
 
   async function save(force = false) {
@@ -125,18 +215,41 @@ export function UploadForm({ onBack }: UploadFormProps) {
 
   return (
     <div className="space-y-5">
-      <button onClick={onBack} className="text-sm text-brand-600 hover:underline">&larr; Back</button>
+      <button onClick={step === 'upload' ? onBack : resetUpload} className="text-sm text-brand-600 hover:underline">
+        &larr; {step === 'upload' ? 'Back' : 'Start Over'}
+      </button>
 
       {error && (
         <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
-          <p className="font-medium">Upload failed</p>
+          <p className="font-medium">Error</p>
           <p className="mt-1">{error}</p>
         </div>
       )}
 
-      {!extraction ? (
-        <UploadDropzone uploading={uploading} onUpload={handleUpload} />
-      ) : (
+      {/* Step 1: Upload */}
+      {step === 'upload' && (
+        <UploadDropzone uploading={uploading || scanning} onUpload={handleUpload} />
+      )}
+      {scanning && (
+        <div className="card p-4 text-center text-sm text-gray-500">
+          Scanning for personal information...
+        </div>
+      )}
+
+      {/* Step 2: Redaction preview */}
+      {step === 'redaction' && piiScan && (
+        <RedactionPreview
+          text={piiScan.text}
+          piiMatches={piiScan.piiMatches}
+          ocrConfidence={piiScan.ocrConfidence}
+          onApprove={handleRedactionApproved}
+          onSkip={handleSkipRedaction}
+          loading={extracting}
+        />
+      )}
+
+      {/* Step 3: Review extraction */}
+      {step === 'review' && extraction && (
         <div className="space-y-4">
           <ExtractionBanner
             confidence={confidence}
