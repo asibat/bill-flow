@@ -32,7 +32,7 @@ Belgian bill management app for expats. Extracts payment details from uploaded b
 
 ### 1. Bill Upload (with Privacy Protection)
 
-The upload flow has two paths: direct extraction (faster, more accurate) and privacy-first extraction (PII redacted before AI sees the document).
+The upload flow runs direct extraction first, then scans for PII. The user chooses between privacy-first (redacted) or maximum accuracy (direct). When OCR confidence is low, a side-by-side comparison helps the user pick the best fields from either extraction.
 
 ```
 User uploads file
@@ -49,21 +49,42 @@ User uploads file
 │      scan        │──────▶ Regex PII detection (NN, phone, email, address, name)
 └────────┬─────────┘
          │
-         ├── No PII found ──▶ Show extraction results (review step)
+         ├── No PII found ──▶ Go to Review step
          │
          ▼ PII found
 ┌──────────────────┐
-│ Redaction Preview│  User sees highlighted PII with toggle per item
-│ (client-side)    │  Can approve redactions or skip
+│ Privacy Choice   │  User picks one of two modes:
 └────────┬─────────┘
          │
-         ├── Skip ──▶ Use direct extraction results
+         ├── 🎯 Maximum Accuracy ──▶ Use direct extraction, go to Review
          │
-         ▼ Approve
+         ▼ 🔒 Strict Privacy
+┌──────────────────┐
+│ Redaction Preview│  User sees highlighted PII with per-item toggle
+│ (client-side)    │  Can select which items to redact
+└────────┬─────────┘
+         │
+         ▼ Approve redactions
 ┌──────────────────┐
 │ POST /api/pii/   │──────▶ Send REDACTED text to Gemini
 │    extract       │        (AI never sees personal data)
 └────────┬─────────┘
+         │
+         ├── OCR confidence >= 80% ──▶ Use redacted extraction, go to Review
+         │
+         ▼ OCR confidence < 80%
+┌──────────────────────────────────────────────────┐
+│ Side-by-Side Comparison                          │
+│                                                  │
+│  ┌─────────────────┐    ┌─────────────────┐      │
+│  │ 🔒 Redacted     │ vs │ 🎯 Direct       │      │
+│  │ (privacy-first) │    │ (full image)    │      │
+│  └─────────────────┘    └─────────────────┘      │
+│                                                  │
+│  User clicks cells to pick best value per field  │
+│  Fields that differ are highlighted              │
+│  Default: prefer redacted unless field is empty  │
+└────────┬─────────────────────────────────────────┘
          │
          ▼
 ┌──────────────────┐
@@ -71,7 +92,10 @@ User uploads file
 └──────────────────┘
 ```
 
-**Privacy tradeoff:** Direct extraction (Gemini reads the image) is more accurate. Redacted extraction (Gemini reads OCR text with placeholders) protects privacy but may lose accuracy on poorly scanned documents. The user decides per bill.
+**Privacy vs accuracy tradeoff:** The user controls this per bill:
+- **Strict Privacy** — AI only sees redacted OCR text. May lose accuracy on poor scans.
+- **Maximum Accuracy** — AI reads the original image. Best extraction quality.
+- **Comparison view** — Shown when OCR confidence < 80%. User cherry-picks fields from both extractions. Default selection favors privacy (redacted values) unless a field is empty.
 
 ### 2. Email / Doccle Ingestion
 

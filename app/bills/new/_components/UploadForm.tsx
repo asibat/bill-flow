@@ -8,6 +8,7 @@ import { ExtractionBanner } from '@/components/bills/ExtractionBanner'
 import { VendorMatchBanner } from '@/components/bills/VendorMatchBanner'
 import { BillFormFields } from '@/components/bills/BillFormFields'
 import { RedactionPreview } from '@/components/bills/RedactionPreview'
+import { ExtractionComparison } from '@/components/bills/ExtractionComparison'
 import type { ExtractionResult, VendorMatch, BillFormData, UploadResponse } from '@/types'
 
 interface DuplicateInfo {
@@ -31,11 +32,13 @@ interface PiiScanResult {
   matchCount: number
 }
 
-type Step = 'upload' | 'redaction' | 'review'
+type Step = 'upload' | 'privacy-choice' | 'redaction' | 'comparison' | 'review'
 
 interface UploadFormProps {
   onBack: () => void
 }
+
+const OCR_CONFIDENCE_THRESHOLD = 80
 
 export function UploadForm({ onBack }: UploadFormProps) {
   const [step, setStep] = useState<Step>('upload')
@@ -43,7 +46,6 @@ export function UploadForm({ onBack }: UploadFormProps) {
   const [scanning, setScanning] = useState(false)
   const [extracting, setExtracting] = useState(false)
   const [reextracting, setReextracting] = useState(false)
-  const [extraction, setExtraction] = useState<ExtractionResult | null>(null)
   const [storagePath, setStoragePath] = useState('')
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState<BillFormData>({})
@@ -51,17 +53,21 @@ export function UploadForm({ onBack }: UploadFormProps) {
   const [error, setError] = useState<string | null>(null)
   const [duplicates, setDuplicates] = useState<DuplicateInfo[] | null>(null)
   const [piiScan, setPiiScan] = useState<PiiScanResult | null>(null)
+  // Keep both extractions for comparison
+  const [directExtraction, setDirectExtraction] = useState<ExtractionResult | null>(null)
+  const [redactedExtraction, setRedactedExtraction] = useState<ExtractionResult | null>(null)
+  const [activeExtraction, setActiveExtraction] = useState<ExtractionResult | null>(null)
+  const [directVendor, setDirectVendor] = useState<VendorMatch | null>(null)
   const router = useRouter()
 
-  function applyExtraction(data: UploadResponse) {
-    setExtraction(data.extraction)
-    if (data.storage_path) setStoragePath(data.storage_path)
+  function applyFinalExtraction(extraction: ExtractionResult, v: VendorMatch | null) {
+    setActiveExtraction(extraction)
     const formData: BillFormData = {}
-    for (const [key, value] of Object.entries(data.extraction)) {
+    for (const [key, value] of Object.entries(extraction)) {
       formData[key] = value ?? ''
     }
     setForm(formData)
-    setVendor(data.vendor ?? null)
+    setVendor(v)
     setStep('review')
   }
 
@@ -70,7 +76,7 @@ export function UploadForm({ onBack }: UploadFormProps) {
     setError(null)
 
     try {
-      // Step 1: Store file first
+      // Step 1: Store file + direct extraction
       const storeFd = new FormData()
       storeFd.append('file', file)
       const storeRes = await fetch('/api/upload', { method: 'POST', body: storeFd })
@@ -80,8 +86,10 @@ export function UploadForm({ onBack }: UploadFormProps) {
       }
       const storeData: UploadResponse = await storeRes.json()
       setStoragePath(storeData.storage_path)
+      setDirectExtraction(storeData.extraction)
+      setDirectVendor(storeData.vendor ?? null)
 
-      // Step 2: PII scan
+      // Step 2: PII scan (parallel would be ideal, but sequential for clarity)
       setUploading(false)
       setScanning(true)
 
@@ -93,15 +101,13 @@ export function UploadForm({ onBack }: UploadFormProps) {
         const scanData: PiiScanResult = await scanRes.json()
         if (scanData.matchCount > 0) {
           setPiiScan(scanData)
-          // Also store the direct extraction for "Skip" path
-          applyExtractionSilent(storeData)
-          setStep('redaction')
+          setStep('privacy-choice')
           return
         }
       }
 
-      // No PII found or scan failed — use direct extraction
-      applyExtraction(storeData)
+      // No PII found or scan failed — go straight to review with direct extraction
+      applyFinalExtraction(storeData.extraction, storeData.vendor ?? null)
     } catch (err) {
       console.error('Upload failed:', err)
       setError(err instanceof Error ? err.message : 'Upload failed')
@@ -111,16 +117,14 @@ export function UploadForm({ onBack }: UploadFormProps) {
     }
   }
 
-  /** Store extraction data without changing step */
-  function applyExtractionSilent(data: UploadResponse) {
-    setExtraction(data.extraction)
-    if (data.storage_path) setStoragePath(data.storage_path)
-    const formData: BillFormData = {}
-    for (const [key, value] of Object.entries(data.extraction)) {
-      formData[key] = value ?? ''
+  function handlePrivacyChoice(choice: 'strict' | 'skip') {
+    if (choice === 'skip') {
+      // User chose to skip redaction — use direct extraction
+      applyFinalExtraction(directExtraction!, directVendor)
+    } else {
+      // User chose strict privacy — show redaction preview
+      setStep('redaction')
     }
-    setForm(formData)
-    setVendor(data.vendor ?? null)
   }
 
   async function handleRedactionApproved(redactedText: string) {
@@ -137,18 +141,28 @@ export function UploadForm({ onBack }: UploadFormProps) {
         throw new Error(body.error || `Extraction failed (${res.status})`)
       }
       const data: UploadResponse = await res.json()
-      applyExtraction(data)
+      setRedactedExtraction(data.extraction)
+
+      // If OCR confidence is low, show comparison
+      if (piiScan && piiScan.ocrConfidence < OCR_CONFIDENCE_THRESHOLD) {
+        setStep('comparison')
+      } else {
+        // OCR confidence is good — use redacted extraction (privacy-first)
+        applyFinalExtraction(data.extraction, data.vendor ?? null)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Extraction failed')
-      setStep('review')
+      // Fall back to direct extraction on error
+      if (directExtraction) {
+        applyFinalExtraction(directExtraction, directVendor)
+      }
     } finally {
       setExtracting(false)
     }
   }
 
-  function handleSkipRedaction() {
-    // Use the already-extracted data from direct upload
-    setStep('review')
+  function handleComparisonSelect(extraction: ExtractionResult) {
+    applyFinalExtraction(extraction, directVendor)
   }
 
   async function reextract() {
@@ -160,16 +174,20 @@ export function UploadForm({ onBack }: UploadFormProps) {
       body: JSON.stringify({ storage_path: storagePath }),
     })
     const data: UploadResponse = await res.json()
-    applyExtraction(data)
+    setDirectExtraction(data.extraction)
+    applyFinalExtraction(data.extraction, data.vendor ?? null)
     setReextracting(false)
   }
 
   function resetUpload() {
     setStep('upload')
-    setExtraction(null)
+    setDirectExtraction(null)
+    setRedactedExtraction(null)
+    setActiveExtraction(null)
     setStoragePath('')
     setForm({})
     setVendor(null)
+    setDirectVendor(null)
     setPiiScan(null)
     setDuplicates(null)
     setError(null)
@@ -211,7 +229,7 @@ export function UploadForm({ onBack }: UploadFormProps) {
     }
   }
 
-  const confidence = extraction?.confidence ?? 0
+  const confidence = activeExtraction?.confidence ?? 0
 
   return (
     <div className="space-y-5">
@@ -236,20 +254,77 @@ export function UploadForm({ onBack }: UploadFormProps) {
         </div>
       )}
 
-      {/* Step 2: Redaction preview */}
+      {/* Step 2: Privacy choice */}
+      {step === 'privacy-choice' && piiScan && (
+        <div className="space-y-4">
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <p className="text-sm font-semibold text-amber-800">
+              Personal information detected ({piiScan.matchCount} item{piiScan.matchCount !== 1 ? 's' : ''})
+            </p>
+            <p className="text-sm text-amber-700 mt-1">
+              We found personal details in this document. Choose how you want to proceed:
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <button
+              onClick={() => handlePrivacyChoice('strict')}
+              className="card p-5 text-left hover:shadow-md hover:border-green-300 transition-all group"
+            >
+              <div className="text-2xl mb-2">🔒</div>
+              <p className="font-semibold text-gray-900 group-hover:text-green-700">Strict Privacy</p>
+              <p className="text-sm text-gray-500 mt-1">
+                Review and redact personal data before sending to AI.
+                The AI will only see redacted text.
+              </p>
+              {piiScan.ocrConfidence < OCR_CONFIDENCE_THRESHOLD && (
+                <p className="text-xs text-amber-600 mt-2">
+                  OCR confidence is {Math.round(piiScan.ocrConfidence)}% — you'll see a comparison to verify accuracy
+                </p>
+              )}
+            </button>
+
+            <button
+              onClick={() => handlePrivacyChoice('skip')}
+              className="card p-5 text-left hover:shadow-md hover:border-blue-300 transition-all group"
+            >
+              <div className="text-2xl mb-2">🎯</div>
+              <p className="font-semibold text-gray-900 group-hover:text-blue-700">Maximum Accuracy</p>
+              <p className="text-sm text-gray-500 mt-1">
+                Send the original document directly to AI. More accurate extraction but the AI sees all content.
+              </p>
+              <p className="text-xs text-gray-400 mt-2">
+                Extraction already completed with {Math.round((directExtraction?.confidence ?? 0) * 100)}% confidence
+              </p>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Step 3: Redaction preview */}
       {step === 'redaction' && piiScan && (
         <RedactionPreview
           text={piiScan.text}
           piiMatches={piiScan.piiMatches}
           ocrConfidence={piiScan.ocrConfidence}
           onApprove={handleRedactionApproved}
-          onSkip={handleSkipRedaction}
+          onSkip={() => applyFinalExtraction(directExtraction!, directVendor)}
           loading={extracting}
         />
       )}
 
-      {/* Step 3: Review extraction */}
-      {step === 'review' && extraction && (
+      {/* Step 4: Side-by-side comparison (low OCR confidence) */}
+      {step === 'comparison' && directExtraction && redactedExtraction && piiScan && (
+        <ExtractionComparison
+          directExtraction={directExtraction}
+          redactedExtraction={redactedExtraction}
+          ocrConfidence={piiScan.ocrConfidence}
+          onSelect={handleComparisonSelect}
+        />
+      )}
+
+      {/* Step 5: Review extraction */}
+      {step === 'review' && activeExtraction && (
         <div className="space-y-4">
           <ExtractionBanner
             confidence={confidence}
