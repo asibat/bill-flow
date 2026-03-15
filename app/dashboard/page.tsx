@@ -2,6 +2,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { formatAmount, formatDueDate, getBillStatusColor, getBillStatusLabel } from '@/lib/utils'
 import { aggregateByCurrency } from '@/lib/currency'
 import { getMonthlySpending, getTopVendors, getSpendingTrend } from '@/lib/analytics'
+import { isFeatureEnabled } from '@/lib/features'
 import { differenceInDays, format } from 'date-fns'
 import Link from 'next/link'
 import type { Bill } from '@/types'
@@ -30,10 +31,11 @@ export default async function DashboardPage() {
     unpaid.map(b => ({ amount: b.amount, currency: b.currency }))
   )
 
-  // Analytics
-  const monthlySpending = getMonthlySpending(allBills, 6)
-  const topVendors = getTopVendors(allBills, 5)
-  const trend = getSpendingTrend(monthlySpending)
+  // Analytics (feature-flagged)
+  const showAnalytics = isFeatureEnabled('DASHBOARD_ANALYTICS')
+  const monthlySpending = showAnalytics ? getMonthlySpending(allBills, 6) : []
+  const topVendors = showAnalytics ? getTopVendors(allBills, 5) : []
+  const trend = showAnalytics ? getSpendingTrend(monthlySpending) : null
   const totalPaid = paid.reduce((s, b) => s + b.amount, 0)
 
   return (
