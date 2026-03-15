@@ -1,0 +1,83 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { z } from 'zod'
+
+const CreateBillSchema = z.object({
+  payee_name: z.string().min(1),
+  payee_id: z.string().uuid().optional().nullable(),
+  amount: z.number().positive(),
+  currency: z.string().default('EUR'),
+  due_date: z.string(),
+  structured_comm: z.string().optional().nullable(),
+  iban: z.string().optional().nullable(),
+  bic: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+  source: z.enum(['doccle', 'email', 'upload', 'manual']).default('manual'),
+  raw_pdf_path: z.string().optional().nullable(),
+  extraction_confidence: z.number().optional().nullable(),
+  structured_comm_valid: z.boolean().optional().nullable(),
+  language_detected: z.string().optional().nullable(),
+  explanation: z.string().optional().nullable(),
+})
+
+export async function GET(request: NextRequest) {
+  const supabase = createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { searchParams } = new URL(request.url)
+  const status = searchParams.get('status')
+  const limit = parseInt(searchParams.get('limit') || '50')
+
+  let query = supabase
+    .from('bills')
+    .select('*, payees(name, category)')
+    .eq('user_id', user.id)
+    .order('due_date', { ascending: true })
+    .limit(limit)
+
+  if (status && status !== 'all') {
+    query = query.eq('status', status)
+  }
+
+  const { data, error } = await query
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  return NextResponse.json({ bills: data })
+}
+
+export async function POST(request: NextRequest) {
+  const supabase = createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const body = await request.json()
+  const parsed = CreateBillSchema.safeParse(body)
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
+  }
+
+  const { data, error } = await supabase
+    .from('bills')
+    .insert({ ...parsed.data, user_id: user.id })
+    .select()
+    .single()
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Auto-create reminder 3 days before due date
+  const dueDate = new Date(parsed.data.due_date)
+  const reminderDate = new Date(dueDate)
+  reminderDate.setDate(reminderDate.getDate() - 3)
+  
+  if (reminderDate > new Date()) {
+    await supabase.from('reminders').insert({
+      bill_id: data.id,
+      user_id: user.id,
+      remind_at: reminderDate.toISOString(),
+      channel: 'email',
+    })
+  }
+
+  return NextResponse.json({ bill: data }, { status: 201 })
+}
