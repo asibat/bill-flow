@@ -25,6 +25,7 @@ export default async function BillsLayout({ children }: { children: React.ReactN
           <NavLink href="/dashboard" label="Dashboard" icon="📊" />
           <NavLink href="/bills" label="All Bills" icon="📄" />
           <NavLink href="/bills/new" label="Add Bill" icon="➕" />
+          <NavLink href="/vendors" label="Vendors" icon="🏢" />
         </nav>
         <div className="px-4 py-4 border-t border-brand-600 space-y-3">
           {settings?.email_inbox_address && (

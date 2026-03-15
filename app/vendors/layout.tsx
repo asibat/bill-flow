@@ -1,10 +1,9 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import Link from 'next/link'
 import SignOutButton from '@/components/layout/SignOutButton'
 import NavLink from '@/components/layout/NavLink'
 
-export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default async function VendorsLayout({ children }: { children: React.ReactNode }) {
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
@@ -17,7 +16,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="min-h-screen flex">
-      {/* Sidebar */}
       <aside className="w-64 bg-brand-700 text-white flex flex-col fixed inset-y-0 left-0 z-10">
         <div className="px-6 py-5 border-b border-brand-600">
           <span className="text-xl font-bold tracking-tight">BillFlow</span>
@@ -42,7 +40,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
           </div>
         </div>
       </aside>
-      {/* Main content */}
       <main className="flex-1 ml-64 min-h-screen">
         {children}
       </main>
