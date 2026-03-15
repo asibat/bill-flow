@@ -49,7 +49,7 @@ const ADDRESS_PATTERNS = [
   // NL: straat/laan/weg/plein + number
   /\b[A-ZÀ-Ü][a-zà-ü]+(?:straat|laan|weg|plein|dreef|steenweg|singel)\s+\d{1,4}(?:\s*[\/,]\s*\d{1,4})?\b/gi,
   // Postal code + city: 1000 Bruxelles, 2000 Antwerpen
-  /\b[1-9]\d{3}\s+[A-ZÀ-Ü][a-zà-ü]+(?:\s+[A-ZÀ-Ü][a-zà-ü]+)?\b/g,
+  /\b[1-9]\d{3}[ \t]+[A-ZÀ-Ü][a-zà-ü]+(?:[ \t]+[A-ZÀ-Ü][a-zà-ü]+)?\b/g,
 ]
 
 /** Name headers in Belgian bills */
@@ -138,9 +138,27 @@ export function detectPii(text: string): PiiMatch[] {
     }
   }
 
+  // Filter out matches that overlap with IBANs or structured communications
+  const protectedRanges = findProtectedRanges(text)
+  const filtered = matches.filter(m => !protectedRanges.some(([s, e]) => m.start < e && m.end > s))
+
   // Sort by position and deduplicate overlapping matches
-  matches.sort((a, b) => a.start - b.start)
-  return deduplicateOverlapping(matches)
+  filtered.sort((a, b) => a.start - b.start)
+  return deduplicateOverlapping(filtered)
+}
+
+const IBAN_RE = /\b[A-Z]{2}\d{2}\s*\d{4}\s*\d{4}\s*\d{4}\s*\d{0,4}\b/g
+const STRUCTURED_COMM_RE = /\+{3}\d{3}\/\d{4}\/\d{5}\+{3}/g
+
+function findProtectedRanges(text: string): [number, number][] {
+  const ranges: [number, number][] = []
+  for (const m of text.matchAll(new RegExp(IBAN_RE))) {
+    ranges.push([m.index!, m.index! + m[0].length])
+  }
+  for (const m of text.matchAll(new RegExp(STRUCTURED_COMM_RE))) {
+    ranges.push([m.index!, m.index! + m[0].length])
+  }
+  return ranges
 }
 
 /**

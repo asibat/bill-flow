@@ -21,11 +21,13 @@ Belgian bill management app for expats. Extracts payment details from uploaded b
                                                 │
                     ┌───────────────┬────────────┼────────────┐
                     ▼               ▼            ▼            ▼
-              ┌──────────┐  ┌────────────┐ ┌─────────┐ ┌──────────┐
-              │ Supabase │  │ Gemini /   │ │ Resend  │ │ Tesseract│
-              │ (DB +    │  │ Claude API │ │ (Email) │ │ (Local   │
-              │ Storage) │  │ (Extract)  │ │         │ │  OCR)    │
-              └──────────┘  └────────────┘ └─────────┘ └──────────┘
+              ┌──────────┐  ┌────────────┐ ┌─────────┐ ┌──────────────┐
+              │ Supabase │  │ Gemini /   │ │ Resend  │ │ PII Service  │
+              │ (DB +    │  │ Claude API │ │ (Email) │ │ (Python/     │
+              │ Storage) │  │ (Extract)  │ │         │ │  FastAPI)    │
+              └──────────┘  └────────────┘ └─────────┘ │ OCR + PII   │
+                                                        │ Detection   │
+                                                        └──────────────┘
 ```
 
 ## Core Flows
@@ -45,8 +47,8 @@ User uploads file
          │
          ▼
 ┌──────────────────┐
-│ POST /api/pii/   │──────▶ OCR with tesseract.js (local, no API)
-│      scan        │──────▶ Regex PII detection (NN, phone, email, address, name)
+│ POST /api/pii/   │──────▶ Proxies to PII Service (Python/FastAPI)
+│      scan        │──────▶ OCR (pytesseract/pdfplumber) + regex PII detection
 └────────┬─────────┘
          │
          ├── No PII found ──▶ Go to Review step
@@ -224,7 +226,7 @@ All user bills
 | Module | Path | Purpose |
 |--------|------|---------|
 | Extraction | `lib/extraction/` | AI-powered bill data extraction (Gemini/Claude) |
-| PII | `lib/pii/` | OCR + PII detection + redaction |
+| PII | `lib/pii/client.ts` + `services/pii-service/` | OCR + PII detection via Python microservice |
 | Dedup | `lib/dedup/` | Bill fingerprinting and duplicate detection |
 | Recurring | `lib/recurring/` | Recurring bill pattern detection |
 | Analytics | `lib/analytics/` | Spending trends, vendor breakdowns |
