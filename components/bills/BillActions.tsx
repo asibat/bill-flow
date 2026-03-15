@@ -1,11 +1,13 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { format } from 'date-fns'
 import type { Bill } from '@/types'
 
 export default function BillActions({ bill }: { bill: Bill }) {
   const [loading, setLoading] = useState(false)
   const [showPaidForm, setShowPaidForm] = useState(false)
+  const [paidAt, setPaidAt] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [wireRef, setWireRef] = useState(bill.wire_reference || '')
   const [notes, setNotes] = useState(bill.notes || '')
   const router = useRouter()
@@ -22,7 +24,11 @@ export default function BillActions({ bill }: { bill: Bill }) {
   }
 
   async function markSent() {
-    await updateStatus('payment_sent', { wire_reference: wireRef, notes })
+    await updateStatus('payment_sent', {
+      paid_at: new Date(paidAt).toISOString(),
+      wire_reference: wireRef || null,
+      notes: notes || null,
+    })
     setShowPaidForm(false)
   }
 
@@ -48,7 +54,7 @@ export default function BillActions({ bill }: { bill: Bill }) {
                 className="btn-primary"
                 disabled={loading}
               >
-                ✅ Mark as Payment Sent
+                Mark as Paid
               </button>
               {bill.status === 'received' && (
                 <button
@@ -56,27 +62,38 @@ export default function BillActions({ bill }: { bill: Bill }) {
                   className="btn-secondary"
                   disabled={loading}
                 >
-                  📅 Mark as Scheduled
+                  Mark as Scheduled
                 </button>
               )}
               <button onClick={deleteBill} className="btn-danger" disabled={loading}>
-                🗑 Delete
+                Delete
               </button>
             </div>
           ) : (
             <div className="space-y-4">
               <div>
-                <label className="label">Wire Transfer Reference (optional)</label>
+                <label className="label">Payment Date</label>
+                <input
+                  type="date"
+                  className="input"
+                  value={paidAt}
+                  onChange={e => setPaidAt(e.target.value)}
+                />
+                <p className="text-xs text-gray-400 mt-1">Defaults to today. Change if you paid on a different date.</p>
+              </div>
+              <div>
+                <label className="label">Transaction ID <span className="text-gray-400 font-normal">(optional)</span></label>
                 <input
                   type="text"
                   className="input"
-                  placeholder="e.g. your bank's transaction ID"
+                  placeholder="e.g. your bank's transaction reference"
                   value={wireRef}
                   onChange={e => setWireRef(e.target.value)}
                 />
+                <p className="text-xs text-gray-400 mt-1">You can add this later from the bill details.</p>
               </div>
               <div>
-                <label className="label">Notes (optional)</label>
+                <label className="label">Notes <span className="text-gray-400 font-normal">(optional)</span></label>
                 <input
                   type="text"
                   className="input"
@@ -87,7 +104,7 @@ export default function BillActions({ bill }: { bill: Bill }) {
               </div>
               <div className="flex gap-3">
                 <button onClick={markSent} className="btn-primary" disabled={loading}>
-                  {loading ? 'Saving…' : 'Confirm Payment Sent'}
+                  {loading ? 'Saving...' : 'Confirm Payment'}
                 </button>
                 <button onClick={() => setShowPaidForm(false)} className="btn-secondary">
                   Cancel
@@ -99,24 +116,60 @@ export default function BillActions({ bill }: { bill: Bill }) {
       )}
 
       {bill.status === 'payment_sent' && (
-        <div className="flex gap-3">
-          <button
-            onClick={() => updateStatus('confirmed')}
-            className="btn-primary"
-            disabled={loading}
-          >
-            ✅ Confirm Payment Received
-          </button>
-          <button onClick={deleteBill} className="btn-danger" disabled={loading}>
-            🗑 Delete
-          </button>
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            {bill.paid_at && <span>Paid on {format(new Date(bill.paid_at), 'd MMM yyyy')}</span>}
+            {bill.wire_reference && <span className="text-gray-400">·</span>}
+            {bill.wire_reference && <span className="font-mono text-xs">{bill.wire_reference}</span>}
+          </div>
+
+          {!bill.wire_reference && (
+            <div>
+              <label className="label">Add Transaction ID</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  className="input flex-1"
+                  placeholder="e.g. bank transaction reference"
+                  value={wireRef}
+                  onChange={e => setWireRef(e.target.value)}
+                />
+                <button
+                  onClick={() => updateStatus('payment_sent', { wire_reference: wireRef })}
+                  className="btn-secondary"
+                  disabled={loading || !wireRef}
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-3">
+            <button
+              onClick={() => updateStatus('confirmed')}
+              className="btn-primary"
+              disabled={loading}
+            >
+              Confirm Payment Received
+            </button>
+            <button onClick={deleteBill} className="btn-danger" disabled={loading}>
+              Delete
+            </button>
+          </div>
         </div>
       )}
 
       {bill.status === 'confirmed' && (
-        <div className="flex items-center gap-2">
-          <span className="text-green-600 font-medium">✅ Payment confirmed</span>
-          <button onClick={deleteBill} className="btn-secondary text-xs ml-4" disabled={loading}>
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-sm text-green-700">
+            <span className="font-medium">Payment confirmed</span>
+            {bill.paid_at && <span className="text-gray-400">·</span>}
+            {bill.paid_at && <span className="text-gray-500">{format(new Date(bill.paid_at), 'd MMM yyyy')}</span>}
+            {bill.wire_reference && <span className="text-gray-400">·</span>}
+            {bill.wire_reference && <span className="font-mono text-xs text-gray-500">{bill.wire_reference}</span>}
+          </div>
+          <button onClick={deleteBill} className="btn-secondary text-xs" disabled={loading}>
             Delete
           </button>
         </div>
