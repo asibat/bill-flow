@@ -1,6 +1,5 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: { serverComponentsExternalPackages: ['@anthropic-ai/sdk', 'tesseract.js'] },
-  serverExternalPackages: ['tesseract.js'],
+  experimental: { serverComponentsExternalPackages: ['@anthropic-ai/sdk'] },
 }
 module.exports = nextConfig

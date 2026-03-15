@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
-import { extractText } from '@/lib/pii/ocr'
-import { detectPii } from '@/lib/pii/detect'
+import { scanFile } from '@/lib/pii/client'
 
 export const runtime = 'nodejs'
 export const maxDuration = 30
 
 /**
  * POST /api/pii/scan
- * Accepts a file upload, runs OCR locally, detects PII,
- * and returns the text + PII matches for user review.
+ * Accepts a file upload, proxies to the PII microservice for OCR + PII detection.
+ * Auth boundary stays here — the Python service trusts the caller.
  */
 export async function POST(request: NextRequest) {
   const supabase = createServerSupabaseClient()
@@ -24,17 +23,13 @@ export async function POST(request: NextRequest) {
   const buffer = Buffer.from(bytes)
 
   try {
-    // OCR: extract text locally (no external API)
-    const ocrResult = await extractText(buffer)
-
-    // Detect PII in extracted text
-    const piiMatches = detectPii(ocrResult.text)
+    const result = await scanFile(buffer, file.name)
 
     return NextResponse.json({
-      text: ocrResult.text,
-      ocrConfidence: ocrResult.confidence,
-      piiMatches,
-      matchCount: piiMatches.length,
+      text: result.text,
+      ocrConfidence: result.ocr_confidence,
+      piiMatches: result.pii_matches,
+      matchCount: result.match_count,
     })
   } catch (err) {
     console.error('PII scan failed:', err)
