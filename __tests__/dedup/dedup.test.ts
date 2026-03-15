@@ -61,4 +61,42 @@ describe('buildFingerprint()', () => {
     const fp2 = buildFingerprint({ ...base, structured_comm: '260275448343' })
     expect(fp1).toBe(fp2)
   })
+
+  it('handles special characters in payee name', () => {
+    const fp = buildFingerprint({
+      payee_name: 'Partena-Mutualité Libre',
+      amount: 44.25,
+      due_date: '2026-04-07',
+      structured_comm: null,
+    })
+    expect(fp).toBe('partena-mutualité libre|44.25|2026-04-07')
+  })
+
+  it('produces identical fingerprints for same bill uploaded twice', () => {
+    const bill = { payee_name: 'VIVAQUA', amount: 45, due_date: '2026-03-15', structured_comm: '+++090/9337/55493+++' }
+    expect(buildFingerprint(bill)).toBe(buildFingerprint(bill))
+  })
+
+  it('different payees with same amount/date produce different fingerprints', () => {
+    const base = { amount: 45, due_date: '2026-03-15', structured_comm: null }
+    const fp1 = buildFingerprint({ ...base, payee_name: 'VIVAQUA' })
+    const fp2 = buildFingerprint({ ...base, payee_name: 'Proximus' })
+    expect(fp1).not.toBe(fp2)
+  })
+
+  it('handles zero amount', () => {
+    const fp = buildFingerprint({
+      payee_name: 'Test',
+      amount: 0,
+      due_date: '2026-01-01',
+      structured_comm: null,
+    })
+    expect(fp).toBe('test|0.00|2026-01-01')
+  })
+
+  it('handles floating point amounts consistently', () => {
+    const fp1 = buildFingerprint({ payee_name: 'Test', amount: 44.25, due_date: '2026-01-01', structured_comm: null })
+    const fp2 = buildFingerprint({ payee_name: 'Test', amount: 44.250, due_date: '2026-01-01', structured_comm: null })
+    expect(fp1).toBe(fp2)
+  })
 })
