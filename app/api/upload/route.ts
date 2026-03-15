@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient, createServiceClient } from '@/lib/supabase/server'
-import { extractFromText, extractFromImage } from '@/lib/extraction'
+import { extractFromImage, extractFromDocument } from '@/lib/extraction'
 import { validateStructuredComm, formatStructuredComm } from '@/lib/utils'
 import { matchOrCreateVendor } from '@/lib/vendors/match'
 
@@ -32,12 +32,11 @@ export async function POST(request: NextRequest) {
   }
 
   // Extract bill details from document
+  const base64 = buffer.toString('base64')
   let extractionResponse
   if (mimeType.includes('pdf')) {
-    const base64 = buffer.toString('base64')
-    extractionResponse = await extractFromImage(base64, 'image/jpeg', user.id)
+    extractionResponse = await extractFromDocument(base64, 'application/pdf', user.id)
   } else {
-    const base64 = buffer.toString('base64')
     const validMime = mimeType.includes('png') ? 'image/png' :
                       mimeType.includes('webp') ? 'image/webp' : 'image/jpeg'
     extractionResponse = await extractFromImage(base64, validMime, user.id)

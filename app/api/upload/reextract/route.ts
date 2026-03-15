@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient, createServiceClient } from '@/lib/supabase/server'
-import { extractFromImage } from '@/lib/extraction'
+import { extractFromImage, extractFromDocument } from '@/lib/extraction'
 import { validateStructuredComm, formatStructuredComm } from '@/lib/utils'
 import { matchOrCreateVendor } from '@/lib/vendors/match'
 
@@ -30,7 +30,8 @@ export async function POST(request: NextRequest) {
   }
 
   const buffer = Buffer.from(await fileData.arrayBuffer())
-  const mimeType = storage_path.endsWith('.pdf') ? 'image/jpeg'
+  const isPdf = storage_path.endsWith('.pdf')
+  const mimeType = isPdf ? 'application/pdf'
     : storage_path.endsWith('.png') ? 'image/png'
     : storage_path.endsWith('.webp') ? 'image/webp'
     : 'image/jpeg'
@@ -38,7 +39,9 @@ export async function POST(request: NextRequest) {
   console.log('[reextract] Re-extracting from storage:', storage_path, 'mimeType:', mimeType)
 
   const base64 = buffer.toString('base64')
-  const extractionResponse = await extractFromImage(base64, mimeType, user.id)
+  const extractionResponse = isPdf
+    ? await extractFromDocument(base64, mimeType, user.id)
+    : await extractFromImage(base64, mimeType, user.id)
   const extraction = extractionResponse.result
 
   // Validate structured comm

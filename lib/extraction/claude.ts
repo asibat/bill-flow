@@ -74,4 +74,31 @@ export const claudeProvider: ExtractionProvider = {
       return { result: EMPTY_EXTRACTION, rawParsed: { error: String(err) } }
     }
   },
+
+  async extractFromDocument(base64Doc: string, mimeType: string): Promise<ExtractionProviderResult> {
+    console.log('[extraction:claude] extractFromDocument called, mimeType:', mimeType)
+    try {
+      const response = await anthropic.messages.create({
+        model: 'claude-sonnet-4-5',
+        max_tokens: 1024,
+        system: EXTRACTION_SYSTEM_PROMPT,
+        tools: [EXTRACTION_TOOL],
+        tool_choice: { type: 'auto' },
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'document',
+              source: { type: 'base64', media_type: mimeType as 'application/pdf', data: base64Doc },
+            },
+            { type: 'text', text: 'Extract all payment information from this Belgian bill document.' },
+          ],
+        }],
+      })
+      return extractToolResult(response)
+    } catch (err) {
+      console.error('[extraction:claude] API call failed:', err)
+      return { result: EMPTY_EXTRACTION, rawParsed: { error: String(err) } }
+    }
+  },
 }

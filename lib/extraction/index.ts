@@ -89,3 +89,37 @@ export async function extractFromImage(
 
   return { result, logId };
 }
+
+export async function extractFromDocument(
+  base64Doc: string,
+  mimeType: string,
+  userId: string,
+): Promise<ExtractionResponse> {
+  const start = Date.now();
+  let error: string | null = null;
+
+  const { result, rawParsed } = await extraction.extractFromDocument(
+    base64Doc,
+    mimeType,
+  );
+  const durationMs = Date.now() - start;
+
+  if (result.confidence === 0 && !result.payee_name) {
+    error = "Extraction returned empty result";
+  }
+
+  const logId = await saveExtractionLog({
+    userId,
+    provider: providerName,
+    inputType: "text",
+    input: `[document:${mimeType}:${base64Doc.length} bytes]`,
+    result,
+    rawResponse: rawParsed,
+    extractionNotes:
+      (rawParsed as Record<string, string>).extraction_notes ?? null,
+    durationMs,
+    error,
+  });
+
+  return { result, logId };
+}

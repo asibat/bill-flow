@@ -8,6 +8,7 @@ export interface ExtractionProviderResult {
 export interface ExtractionProvider {
   extractFromText(text: string): Promise<ExtractionProviderResult>
   extractFromImage(base64Image: string, mimeType: string): Promise<ExtractionProviderResult>
+  extractFromDocument(base64Doc: string, mimeType: string): Promise<ExtractionProviderResult>
 }
 
 export const EXTRACTION_SYSTEM_PROMPT = `You are a Belgian bill payment extraction specialist.

@@ -120,4 +120,26 @@ export const geminiProvider: ExtractionProvider = {
       return { result: EMPTY_EXTRACTION, rawParsed: { error: String(err) } };
     }
   },
+
+  async extractFromDocument(
+    base64Doc: string,
+    mimeType: string,
+  ): Promise<ExtractionProviderResult> {
+    console.log("[extraction:gemini] extractFromDocument called, mimeType:", mimeType, "base64 length:", base64Doc.length);
+    try {
+      const res = await model.generateContent([
+        {
+          inlineData: {
+            mimeType,
+            data: base64Doc,
+          },
+        },
+        { text: "Extract all payment information from this Belgian bill document. The document is a PDF — read every page for payment details including IBAN, structured communication, amount, and due date." },
+      ]);
+      return parseResponse(res.response.text());
+    } catch (err) {
+      console.error("[extraction:gemini] API call failed:", err);
+      return { result: EMPTY_EXTRACTION, rawParsed: { error: String(err) } };
+    }
+  },
 };
