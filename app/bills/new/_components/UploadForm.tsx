@@ -21,6 +21,7 @@ export function UploadForm({ onBack }: UploadFormProps) {
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState<BillFormData>({})
   const [vendor, setVendor] = useState<VendorMatch | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const router = useRouter()
 
   function applyExtraction(data: UploadResponse) {
@@ -36,12 +37,23 @@ export function UploadForm({ onBack }: UploadFormProps) {
 
   async function handleUpload(file: File) {
     setUploading(true)
-    const fd = new FormData()
-    fd.append('file', file)
-    const res = await fetch('/api/upload', { method: 'POST', body: fd })
-    const data: UploadResponse = await res.json()
-    applyExtraction(data)
-    setUploading(false)
+    setError(null)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch('/api/upload', { method: 'POST', body: fd })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || `Upload failed (${res.status})`)
+      }
+      const data: UploadResponse = await res.json()
+      applyExtraction(data)
+    } catch (err) {
+      console.error('Upload failed:', err)
+      setError(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
+      setUploading(false)
+    }
   }
 
   async function reextract() {
@@ -87,6 +99,13 @@ export function UploadForm({ onBack }: UploadFormProps) {
   return (
     <div className="space-y-5">
       <button onClick={onBack} className="text-sm text-brand-600 hover:underline">&larr; Back</button>
+
+      {error && (
+        <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+          <p className="font-medium">Upload failed</p>
+          <p className="mt-1">{error}</p>
+        </div>
+      )}
 
       {!extraction ? (
         <UploadDropzone uploading={uploading} onUpload={handleUpload} />

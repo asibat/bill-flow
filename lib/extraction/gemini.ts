@@ -47,12 +47,23 @@ function parseResponse(text: string): ExtractionProviderResult {
   console.log("[extraction:gemini] Raw response:", text);
   try {
     const parsed = JSON.parse(text);
+    // Fallback: if structured_comm is missing, try to extract from raw text or notes
+    let structuredComm = clean(parsed.structured_comm);
+    if (!structuredComm) {
+      const fullText = `${parsed.raw_text_snippet ?? ''} ${parsed.extraction_notes ?? ''}`;
+      const commMatch = fullText.match(/\+{3}\d{3}\/\d{4}\/\d{5}\+{3}/);
+      if (commMatch) {
+        structuredComm = commMatch[0];
+        console.log("[extraction:gemini] Recovered structured_comm from text:", structuredComm);
+      }
+    }
+
     const result: ExtractionResult = {
       payee_name: clean(parsed.payee_name),
       amount: cleanNumber(parsed.amount),
       currency: clean(parsed.currency) ?? "EUR",
       due_date: cleanDate(parsed.due_date),
-      structured_comm: clean(parsed.structured_comm),
+      structured_comm: structuredComm,
       iban: clean(parsed.iban),
       bic: clean(parsed.bic),
       language_detected: clean(parsed.language_detected),

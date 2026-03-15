@@ -56,7 +56,7 @@ export const EXTRACTION_JSON_SCHEMA = {
     raw_text_snippet: { type: 'string', description: 'The most relevant 100-char snippet from the source containing payment details' },
     extraction_notes: { type: 'string', description: 'Step-by-step reasoning: what was found, what was missing and why, what made extraction difficult' },
   },
-  required: ['payee_name', 'currency', 'confidence', 'extraction_notes'],
+  required: ['payee_name', 'currency', 'confidence', 'extraction_notes', 'amount', 'due_date', 'structured_comm', 'iban', 'bic'],
 }
 
 export const EMPTY_EXTRACTION: ExtractionResult = {
