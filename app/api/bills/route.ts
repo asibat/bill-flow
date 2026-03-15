@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { findDuplicates } from '@/lib/dedup'
 import { z } from 'zod'
 
 const CreateBillSchema = z.object({
@@ -55,6 +56,24 @@ export async function POST(request: NextRequest) {
   const parsed = CreateBillSchema.safeParse(body)
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
+  }
+
+  // Check for duplicates
+  const duplicates = await findDuplicates(supabase, user.id, {
+    payee_name: parsed.data.payee_name,
+    amount: parsed.data.amount,
+    due_date: parsed.data.due_date,
+    structured_comm: parsed.data.structured_comm ?? null,
+  })
+
+  if (duplicates.length > 0) {
+    const skipDedup = body.force === true
+    if (!skipDedup) {
+      return NextResponse.json({
+        error: 'Potential duplicate bill detected',
+        duplicates,
+      }, { status: 409 })
+    }
   }
 
   const { data, error } = await supabase

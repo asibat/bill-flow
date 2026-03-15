@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { extractFromText, linkExtractionLogToBill } from '@/lib/extraction'
 import { extractDoccleUrl, parseDoccleHtml, validateStructuredComm, formatStructuredComm } from '@/lib/utils'
 import { matchOrCreateVendor } from '@/lib/vendors/match'
+import { findDuplicates } from '@/lib/dedup'
 import { addDays, differenceInDays, format as formatDate } from 'date-fns'
 
 // Resend sends inbound emails as multipart/form-data
@@ -160,10 +161,23 @@ Doccle page content: ${doccleHtml.slice(0, 4000)}
   const needsReview = !!htmlMeta.amount && !!extraction.amount &&
     Math.abs(htmlMeta.amount - (extraction.amount ?? 0)) > 0.01
 
+  // Dedup check
+  const payeeName = vendor?.payee_name || extraction.payee_name || htmlMeta.payee || 'Unknown (Doccle)'
+  const duplicates = await findDuplicates(supabase, userId, {
+    payee_name: payeeName,
+    amount: extraction.amount ?? htmlMeta.amount ?? null,
+    due_date: extraction.due_date || htmlMeta.dueDate || null,
+    structured_comm: extraction.structured_comm,
+  })
+  if (duplicates.length > 0) {
+    console.warn('[ingest:doccle] Duplicate detected, skipping insert:', duplicates[0].id)
+    return NextResponse.json({ success: true, bill_id: duplicates[0].id, source: 'doccle', duplicate: true })
+  }
+
   const { data: bill, error } = await supabase.from('bills').insert({
     user_id: userId,
     source: 'doccle',
-    payee_name: vendor?.payee_name || extraction.payee_name || htmlMeta.payee || 'Unknown (Doccle)',
+    payee_name: payeeName,
     payee_id: vendor?.payee_id || null,
     amount: extraction.amount ?? htmlMeta.amount ?? 0,
     currency: extraction.currency ?? 'EUR',
@@ -232,10 +246,23 @@ async function handleGenericEmail(
     extraction.bic = vendor.bic
   }
 
+  // Dedup check
+  const emailPayeeName = vendor?.payee_name || extraction.payee_name || subject || fromAddress || 'Unknown'
+  const duplicates = await findDuplicates(supabase, userId, {
+    payee_name: emailPayeeName,
+    amount: extraction.amount,
+    due_date: extraction.due_date,
+    structured_comm: extraction.structured_comm,
+  })
+  if (duplicates.length > 0) {
+    console.warn('[ingest:email] Duplicate detected, skipping insert:', duplicates[0].id)
+    return NextResponse.json({ success: true, bill_id: duplicates[0].id, source: 'email', duplicate: true })
+  }
+
   const { data: bill, error } = await supabase.from('bills').insert({
     user_id: userId,
     source: 'email',
-    payee_name: vendor?.payee_name || extraction.payee_name || subject || fromAddress || 'Unknown',
+    payee_name: emailPayeeName,
     payee_id: vendor?.payee_id || null,
     amount: extraction.amount ?? 0,
     currency: extraction.currency ?? 'EUR',
