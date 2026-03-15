@@ -1,3 +1,18 @@
+export type PrivacyLevel = 'strict' | 'accuracy'
+
+export interface UserSettings {
+  user_id: string
+  display_name: string | null
+  preferred_language: string
+  default_privacy_level: PrivacyLevel
+  salary_day: number | null
+  email_inbox_address: string | null
+  reminder_days_before: number
+  onboarding_completed: boolean
+  created_at: string
+  updated_at: string
+}
+
 export type BillStatus = 'received' | 'scheduled' | 'payment_sent' | 'confirmed' | 'overdue'
 export type BillSource = 'doccle' | 'email' | 'upload' | 'manual'
 

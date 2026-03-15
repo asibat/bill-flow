@@ -9,7 +9,7 @@ import { VendorMatchBanner } from '@/components/bills/VendorMatchBanner'
 import { BillFormFields } from '@/components/bills/BillFormFields'
 import { RedactionPreview } from '@/components/bills/RedactionPreview'
 import { ExtractionComparison } from '@/components/bills/ExtractionComparison'
-import type { ExtractionResult, VendorMatch, BillFormData, UploadResponse } from '@/types'
+import type { ExtractionResult, VendorMatch, BillFormData, UploadResponse, PrivacyLevel } from '@/types'
 
 interface DuplicateInfo {
   id: string
@@ -36,11 +36,12 @@ type Step = 'upload' | 'privacy-choice' | 'redaction' | 'comparison' | 'review'
 
 interface UploadFormProps {
   onBack: () => void
+  defaultPrivacyLevel?: PrivacyLevel
 }
 
 const OCR_CONFIDENCE_THRESHOLD = 80
 
-export function UploadForm({ onBack }: UploadFormProps) {
+export function UploadForm({ onBack, defaultPrivacyLevel = 'strict' }: UploadFormProps) {
   const [step, setStep] = useState<Step>('upload')
   const [uploading, setUploading] = useState(false)
   const [scanning, setScanning] = useState(false)
@@ -101,7 +102,12 @@ export function UploadForm({ onBack }: UploadFormProps) {
         const scanData: PiiScanResult = await scanRes.json()
         if (scanData.matchCount > 0) {
           setPiiScan(scanData)
-          setStep('privacy-choice')
+          // Auto-apply user's default privacy setting
+          if (defaultPrivacyLevel === 'accuracy') {
+            applyFinalExtraction(storeData.extraction, storeData.vendor ?? null)
+          } else {
+            setStep('redaction')
+          }
           return
         }
       }

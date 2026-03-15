@@ -11,9 +11,11 @@ export default async function BillsLayout({ children }: { children: React.ReactN
 
   const { data: settings } = await supabase
     .from('user_settings')
-    .select('email_inbox_address')
+    .select('email_inbox_address, onboarding_completed')
     .eq('user_id', user.id)
     .single()
+
+  if (settings && !settings.onboarding_completed) redirect('/onboarding')
 
   return (
     <div className="min-h-screen flex">
@@ -26,6 +28,7 @@ export default async function BillsLayout({ children }: { children: React.ReactN
           <NavLink href="/bills" label="All Bills" icon="📄" />
           <NavLink href="/bills/new" label="Add Bill" icon="➕" />
           <NavLink href="/vendors" label="Vendors" icon="🏢" />
+          <NavLink href="/dashboard/settings" label="Settings" icon="⚙️" />
         </nav>
         <div className="px-4 py-4 border-t border-brand-600 space-y-3">
           {settings?.email_inbox_address && (
