@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { formatAmount, formatDueDate, getBillStatusColor, getBillStatusLabel } from '@/lib/utils'
+import { aggregateByCurrency } from '@/lib/currency'
 import { differenceInDays } from 'date-fns'
 import Link from 'next/link'
 import type { Bill } from '@/types'
@@ -22,8 +23,10 @@ export default async function DashboardPage() {
     const d = differenceInDays(new Date(b.due_date), new Date())
     return d >= 0 && d <= 7
   })
-  const needsReview = allBills.filter(b => (b as any).needs_review)
-  const totalUnpaid = unpaid.reduce((s, b) => s + b.amount, 0)
+  const needsReview = allBills.filter(b => b.needs_review)
+  const { breakdown: unpaidBreakdown, totalInEur: totalUnpaidEur } = aggregateByCurrency(
+    unpaid.map(b => ({ amount: b.amount, currency: b.currency }))
+  )
 
   return (
     <div className="p-8">
@@ -34,7 +37,14 @@ export default async function DashboardPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-4 gap-4 mb-8">
-        <StatCard label="Total Outstanding" value={formatAmount(totalUnpaid)} sub={`${unpaid.length} bills`} color="blue" />
+        <StatCard
+          label="Total Outstanding"
+          value={unpaidBreakdown.length <= 1 ? formatAmount(totalUnpaidEur) : formatAmount(totalUnpaidEur) + ' equiv.'}
+          sub={unpaidBreakdown.length > 1
+            ? unpaidBreakdown.map(b => b.formatted).join(' + ')
+            : `${unpaid.length} bills`}
+          color="blue"
+        />
         <StatCard label="Overdue" value={String(overdue.length)} sub={overdue.length ? formatAmount(overdue.reduce((s,b)=>s+b.amount,0)) : 'All good!'} color={overdue.length ? 'red' : 'green'} />
         <StatCard label="Due This Week" value={String(dueThisWeek.length)} sub={dueThisWeek.length ? formatAmount(dueThisWeek.reduce((s,b)=>s+b.amount,0)) : 'Nothing urgent'} color={dueThisWeek.length ? 'amber' : 'green'} />
         <StatCard label="Needs Review" value={String(needsReview.length)} sub="Low confidence extractions" color={needsReview.length ? 'amber' : 'green'} />

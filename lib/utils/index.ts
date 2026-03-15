@@ -75,7 +75,13 @@ export function formatDueDate(dateStr: string): string {
 }
 
 export function formatAmount(amount: number, currency = 'EUR'): string {
-  return new Intl.NumberFormat('en-BE', { style: 'currency', currency }).format(amount)
+  const code = currency?.trim().toUpperCase() || 'EUR'
+  try {
+    return new Intl.NumberFormat('en-BE', { style: 'currency', currency: code }).format(amount)
+  } catch {
+    // Fallback for unrecognized currency codes
+    return `${code} ${amount.toFixed(2)}`
+  }
 }
 
 // ── Extract Doccle URL from email text ──
