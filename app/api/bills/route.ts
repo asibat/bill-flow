@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { findDuplicates } from '@/lib/dedup'
+import { createBillReminder } from '@/lib/reminders/create'
 import { z } from 'zod'
 
 const CreateBillSchema = z.object({
@@ -84,17 +85,12 @@ export async function POST(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Auto-create reminder 3 days before due date
-  const dueDate = new Date(parsed.data.due_date)
-  const reminderDate = new Date(dueDate)
-  reminderDate.setDate(reminderDate.getDate() - 3)
-  
-  if (reminderDate > new Date()) {
-    await supabase.from('reminders').insert({
-      bill_id: data.id,
-      user_id: user.id,
-      remind_at: reminderDate.toISOString(),
-      channel: 'email',
+  // Auto-create reminder based on user's preferred days-before setting
+  if (parsed.data.due_date) {
+    await createBillReminder(supabase, {
+      billId: data.id,
+      userId: user.id,
+      dueDate: parsed.data.due_date,
     })
   }
 

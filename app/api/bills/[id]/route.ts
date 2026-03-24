@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createPaymentFollowupReminder, dismissBillReminders, syncBillDueReminders } from '@/lib/reminders/create'
+import { DUE_REMINDER_KINDS } from '@/lib/reminders/kinds'
 import { z } from 'zod'
 
 const UpdateBillSchema = z.object({
@@ -47,6 +49,17 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     updates.paid_at = new Date().toISOString()
   }
 
+  const { data: existingBill, error: existingError } = await supabase
+    .from('bills')
+    .select('id, due_date, status, paid_at')
+    .eq('id', params.id)
+    .eq('user_id', user.id)
+    .single()
+
+  if (existingError || !existingBill) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
+
   const { data, error } = await supabase
     .from('bills')
     .update(updates)
@@ -56,6 +69,34 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  const effectiveDueDate = parsed.data.due_date ?? existingBill.due_date
+  const statusChangedTo = parsed.data.status
+
+  if (parsed.data.due_date && !['payment_sent', 'confirmed'].includes(data.status)) {
+    await syncBillDueReminders(supabase, {
+      billId: data.id,
+      userId: user.id,
+      dueDate: effectiveDueDate,
+    })
+  }
+
+  if (statusChangedTo === 'payment_sent') {
+    await dismissBillReminders(supabase, {
+      billId: data.id,
+      kinds: [...DUE_REMINDER_KINDS],
+    })
+    await createPaymentFollowupReminder(supabase, {
+      billId: data.id,
+      userId: user.id,
+      paidAt: (updates.paid_at as string) ?? existingBill.paid_at ?? new Date().toISOString(),
+    })
+  }
+
+  if (statusChangedTo === 'confirmed') {
+    await dismissBillReminders(supabase, { billId: data.id })
+  }
+
   return NextResponse.json({ bill: data })
 }
 

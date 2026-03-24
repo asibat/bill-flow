@@ -2,12 +2,10 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import type { PrivacyLevel } from '@/types'
 
 interface Props {
   displayName: string
   preferredLanguage: string
-  defaultPrivacyLevel: PrivacyLevel
 }
 
 const LANGUAGES = [
@@ -16,10 +14,9 @@ const LANGUAGES = [
   { value: 'nl', label: 'Nederlands' },
 ]
 
-export function OnboardingForm({ displayName: initialName, preferredLanguage: initialLang, defaultPrivacyLevel: initialPrivacy }: Props) {
+export function OnboardingForm({ displayName: initialName, preferredLanguage: initialLang }: Props) {
   const [displayName, setDisplayName] = useState(initialName)
   const [language, setLanguage] = useState(initialLang)
-  const [privacy, setPrivacy] = useState<PrivacyLevel>(initialPrivacy)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
@@ -34,7 +31,6 @@ export function OnboardingForm({ displayName: initialName, preferredLanguage: in
         body: JSON.stringify({
           display_name: displayName,
           preferred_language: language,
-          default_privacy_level: privacy,
           onboarding_completed: true,
         }),
       })
@@ -101,47 +97,6 @@ export function OnboardingForm({ displayName: initialName, preferredLanguage: in
               {l.label}
             </button>
           ))}
-        </div>
-      </div>
-
-      {/* Privacy level */}
-      <div>
-        <label className="block text-sm font-semibold text-gray-900 mb-2">Default privacy level</label>
-        <p className="text-sm text-gray-500 mb-3">
-          When we detect personal information in your bills, what should we do by default?
-          You can always change this per bill.
-        </p>
-        <div className="grid grid-cols-2 gap-4">
-          <button
-            onClick={() => setPrivacy('strict')}
-            className={`p-5 rounded-xl border text-left transition-all ${
-              privacy === 'strict'
-                ? 'border-green-400 bg-green-50 shadow-sm'
-                : 'border-gray-200 hover:border-gray-300'
-            }`}
-          >
-            <div className="text-2xl mb-2">🔒</div>
-            <p className="font-semibold text-gray-900">Strict Privacy</p>
-            <p className="text-sm text-gray-500 mt-1">
-              Redact personal data before sending to AI. You review what gets removed.
-            </p>
-            <p className="text-xs text-green-600 mt-2 font-medium">Recommended</p>
-          </button>
-
-          <button
-            onClick={() => setPrivacy('accuracy')}
-            className={`p-5 rounded-xl border text-left transition-all ${
-              privacy === 'accuracy'
-                ? 'border-blue-400 bg-blue-50 shadow-sm'
-                : 'border-gray-200 hover:border-gray-300'
-            }`}
-          >
-            <div className="text-2xl mb-2">🎯</div>
-            <p className="font-semibold text-gray-900">Maximum Accuracy</p>
-            <p className="text-sm text-gray-500 mt-1">
-              Send the original document to AI. Best extraction quality.
-            </p>
-          </button>
         </div>
       </div>
 

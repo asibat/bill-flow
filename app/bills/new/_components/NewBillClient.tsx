@@ -4,15 +4,10 @@ import { useState } from 'react'
 import { ModeCard } from '@/components/bills/ModeCard'
 import { UploadForm } from './UploadForm'
 import { ManualForm } from './ManualForm'
-import type { PrivacyLevel } from '@/types'
 
 type Mode = 'choose' | 'upload' | 'manual'
 
-interface Props {
-  defaultPrivacyLevel: PrivacyLevel
-}
-
-export function NewBillClient({ defaultPrivacyLevel }: Props) {
+export function NewBillClient() {
   const [mode, setMode] = useState<Mode>('choose')
 
   return (
@@ -42,7 +37,7 @@ export function NewBillClient({ defaultPrivacyLevel }: Props) {
         </div>
       )}
 
-      {mode === 'upload' && <UploadForm onBack={() => setMode('choose')} defaultPrivacyLevel={defaultPrivacyLevel} />}
+      {mode === 'upload' && <UploadForm onBack={() => setMode('choose')} />}
       {mode === 'manual' && <ManualForm onBack={() => setMode('choose')} />}
     </div>
   )

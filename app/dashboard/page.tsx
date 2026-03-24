@@ -3,9 +3,11 @@ import { formatAmount, formatDueDate, getBillStatusColor, getBillStatusLabel } f
 import { aggregateByCurrency } from '@/lib/currency'
 import { getMonthlySpending, getTopVendors, getSpendingTrend } from '@/lib/analytics'
 import { isFeatureEnabled } from '@/lib/features'
+import { getVisibleReminders } from '@/lib/reminders/view'
 import { differenceInDays, format } from 'date-fns'
 import Link from 'next/link'
 import type { Bill } from '@/types'
+import RemindersList from './_components/RemindersList'
 
 export default async function DashboardPage() {
   const supabase = createServerSupabaseClient()
@@ -17,6 +19,24 @@ export default async function DashboardPage() {
     .eq('user_id', user!.id)
     .order('due_date', { ascending: true })
     .limit(200)
+
+  // Fetch upcoming reminders
+  const { data: reminders } = await supabase
+    .from('reminders')
+    .select('id, bill_id, remind_at, kind, sent_at, dismissed_at, bills!inner(payee_name, amount, currency, due_date, paid_at, status)')
+    .eq('user_id', user!.id)
+    .is('dismissed_at', null)
+    .order('remind_at', { ascending: true })
+    .limit(10)
+
+  const visibleReminders = getVisibleReminders(reminders ?? [])
+
+  // Fetch salary day for countdown
+  const { data: userSettings } = await supabase
+    .from('user_settings')
+    .select('salary_day')
+    .eq('user_id', user!.id)
+    .single()
 
   const allBills: Bill[] = bills || []
   const unpaid = allBills.filter(b => !['confirmed', 'payment_sent'].includes(b.status))
@@ -63,6 +83,23 @@ export default async function DashboardPage() {
           sub={paid.length ? formatAmount(totalPaid) : 'No payments yet'}
           color="green"
         />
+      </div>
+
+      {/* Reminders & Salary */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        {/* Upcoming reminders */}
+        <div className="md:col-span-2">
+          <RemindersList reminders={visibleReminders} />
+        </div>
+
+        {/* Salary countdown + split view */}
+        {userSettings?.salary_day && (
+          <div className="card p-5">
+            <h2 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Next Payday</h2>
+            <SalaryCountdown salaryDay={userSettings.salary_day} totalDue={totalUnpaidEur} />
+            <SalarySplit salaryDay={userSettings.salary_day} bills={unpaid} />
+          </div>
+        )}
       </div>
 
       {/* Spending trend */}
@@ -204,6 +241,82 @@ function StatCard({ label, value, sub, color }: { label: string; value: string; 
       <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">{label}</p>
       <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
       <p className="text-xs text-gray-500 mt-1">{sub}</p>
+    </div>
+  )
+}
+
+function SalaryCountdown({ salaryDay, totalDue }: { salaryDay: number; totalDue: number }) {
+  const today = new Date()
+  const thisMonth = new Date(today.getFullYear(), today.getMonth(), salaryDay)
+  const nextPayday = thisMonth > today ? thisMonth : new Date(today.getFullYear(), today.getMonth() + 1, salaryDay)
+  const daysUntil = differenceInDays(nextPayday, today)
+
+  return (
+    <div className="text-center">
+      <p className="text-4xl font-bold text-brand-600">{daysUntil}</p>
+      <p className="text-sm text-gray-500 mt-1">day{daysUntil !== 1 ? 's' : ''} until payday</p>
+      <p className="text-xs text-gray-400 mt-1">{format(nextPayday, 'd MMMM')}</p>
+      {totalDue > 0 && (
+        <p className="text-xs text-gray-500 mt-3">
+          {formatAmount(totalDue)} due before then
+        </p>
+      )}
+    </div>
+  )
+}
+
+function SalarySplit({ salaryDay, bills }: { salaryDay: number; bills: Bill[] }) {
+  const today = new Date()
+  const thisMonth = new Date(today.getFullYear(), today.getMonth(), salaryDay)
+  const nextPayday = thisMonth > today ? thisMonth : new Date(today.getFullYear(), today.getMonth() + 1, salaryDay)
+
+  const beforePayday = bills.filter(b => new Date(b.due_date) < nextPayday)
+  const afterPayday = bills.filter(b => new Date(b.due_date) >= nextPayday)
+  const beforeTotal = beforePayday.reduce((s, b) => s + b.amount, 0)
+  const afterTotal = afterPayday.reduce((s, b) => s + b.amount, 0)
+
+  if (bills.length === 0) return null
+
+  return (
+    <div className="mt-4 pt-4 border-t border-gray-100 space-y-3">
+      {beforePayday.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between text-xs mb-1">
+            <span className="font-medium text-red-600">Pay before salary</span>
+            <span className="text-gray-500">{formatAmount(beforeTotal)}</span>
+          </div>
+          <div className="space-y-1">
+            {beforePayday.slice(0, 4).map(b => (
+              <Link key={b.id} href={`/bills/${b.id}`} className="flex justify-between text-xs text-gray-600 hover:text-gray-900">
+                <span className="truncate">{b.payee_name}</span>
+                <span className="shrink-0 ml-2">{formatAmount(b.amount)}</span>
+              </Link>
+            ))}
+            {beforePayday.length > 4 && (
+              <span className="text-xs text-gray-400">+{beforePayday.length - 4} more</span>
+            )}
+          </div>
+        </div>
+      )}
+      {afterPayday.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between text-xs mb-1">
+            <span className="font-medium text-green-600">After salary lands</span>
+            <span className="text-gray-500">{formatAmount(afterTotal)}</span>
+          </div>
+          <div className="space-y-1">
+            {afterPayday.slice(0, 3).map(b => (
+              <Link key={b.id} href={`/bills/${b.id}`} className="flex justify-between text-xs text-gray-600 hover:text-gray-900">
+                <span className="truncate">{b.payee_name}</span>
+                <span className="shrink-0 ml-2">{formatAmount(b.amount)}</span>
+              </Link>
+            ))}
+            {afterPayday.length > 3 && (
+              <span className="text-xs text-gray-400">+{afterPayday.length - 3} more</span>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

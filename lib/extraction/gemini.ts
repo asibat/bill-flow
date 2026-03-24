@@ -3,21 +3,24 @@ import type { ExtractionResult } from "@/types";
 import {
   type ExtractionProvider,
   type ExtractionProviderResult,
-  EXTRACTION_SYSTEM_PROMPT,
+  type ExtractionOptions,
+  buildExtractionSystemPrompt,
   EXTRACTION_JSON_SCHEMA,
   EMPTY_EXTRACTION,
 } from "./types";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
-const model = genAI.getGenerativeModel({
-  model: "gemini-2.5-flash",
-  systemInstruction: EXTRACTION_SYSTEM_PROMPT,
-  generationConfig: {
-    responseMimeType: "application/json",
-    responseSchema: EXTRACTION_JSON_SCHEMA,
-  },
-});
+function getModel(options?: ExtractionOptions) {
+  return genAI.getGenerativeModel({
+    model: "gemini-2.5-flash",
+    systemInstruction: buildExtractionSystemPrompt(options),
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema: EXTRACTION_JSON_SCHEMA as unknown as import('@google/generative-ai').Schema,
+    },
+  });
+}
 
 /** Sanitize AI values — Gemini sometimes returns "N/A", "none", -1, etc. instead of null */
 function clean(val: unknown): string | null {
@@ -94,8 +97,9 @@ function parseResponse(text: string): ExtractionProviderResult {
 }
 
 export const geminiProvider: ExtractionProvider = {
-  async extractFromText(text: string): Promise<ExtractionProviderResult> {
+  async extractFromText(text: string, options?: ExtractionOptions): Promise<ExtractionProviderResult> {
     const input = text.slice(0, 8000);
+    const model = getModel(options);
     console.log("[extraction:gemini] extractFromText called, input length:", text.length);
     console.log("[extraction:gemini] Input preview (first 500 chars):", input.slice(0, 500));
     console.log("[extraction:gemini] Input preview (last 500 chars):", input.slice(-500));
@@ -113,7 +117,9 @@ export const geminiProvider: ExtractionProvider = {
   async extractFromImage(
     base64Image: string,
     mimeType: string,
+    options?: ExtractionOptions,
   ): Promise<ExtractionProviderResult> {
+    const model = getModel(options);
     console.log("[extraction:gemini] extractFromImage called, mimeType:", mimeType, "base64 length:", base64Image.length);
     try {
       const res = await model.generateContent([
@@ -135,7 +141,9 @@ export const geminiProvider: ExtractionProvider = {
   async extractFromDocument(
     base64Doc: string,
     mimeType: string,
+    options?: ExtractionOptions,
   ): Promise<ExtractionProviderResult> {
+    const model = getModel(options);
     console.log("[extraction:gemini] extractFromDocument called, mimeType:", mimeType, "base64 length:", base64Doc.length);
     try {
       const res = await model.generateContent([

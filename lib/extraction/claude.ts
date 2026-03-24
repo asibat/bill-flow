@@ -3,7 +3,8 @@ import type { ExtractionResult } from '@/types'
 import {
   type ExtractionProvider,
   type ExtractionProviderResult,
-  EXTRACTION_SYSTEM_PROMPT,
+  type ExtractionOptions,
+  buildExtractionSystemPrompt,
   EXTRACTION_JSON_SCHEMA,
   EMPTY_EXTRACTION,
 } from './types'
@@ -30,13 +31,13 @@ function extractToolResult(response: Anthropic.Message): ExtractionProviderResul
 }
 
 export const claudeProvider: ExtractionProvider = {
-  async extractFromText(text: string): Promise<ExtractionProviderResult> {
+  async extractFromText(text: string, options?: ExtractionOptions): Promise<ExtractionProviderResult> {
     console.log('[extraction:claude] extractFromText called, input length:', text.length)
     try {
       const response = await anthropic.messages.create({
         model: 'claude-sonnet-4-5',
         max_tokens: 1024,
-        system: EXTRACTION_SYSTEM_PROMPT,
+        system: buildExtractionSystemPrompt(options),
         tools: [EXTRACTION_TOOL],
         tool_choice: { type: 'auto' },
         messages: [{ role: 'user', content: `Extract payment information from this Belgian bill:\n\n${text.slice(0, 8000)}` }],
@@ -48,13 +49,13 @@ export const claudeProvider: ExtractionProvider = {
     }
   },
 
-  async extractFromImage(base64Image: string, mimeType: string): Promise<ExtractionProviderResult> {
+  async extractFromImage(base64Image: string, mimeType: string, options?: ExtractionOptions): Promise<ExtractionProviderResult> {
     console.log('[extraction:claude] extractFromImage called, mimeType:', mimeType)
     try {
       const response = await anthropic.messages.create({
         model: 'claude-sonnet-4-5',
         max_tokens: 1024,
-        system: EXTRACTION_SYSTEM_PROMPT,
+        system: buildExtractionSystemPrompt(options),
         tools: [EXTRACTION_TOOL],
         tool_choice: { type: 'auto' },
         messages: [{
@@ -75,13 +76,13 @@ export const claudeProvider: ExtractionProvider = {
     }
   },
 
-  async extractFromDocument(base64Doc: string, mimeType: string): Promise<ExtractionProviderResult> {
+  async extractFromDocument(base64Doc: string, mimeType: string, options?: ExtractionOptions): Promise<ExtractionProviderResult> {
     console.log('[extraction:claude] extractFromDocument called, mimeType:', mimeType)
     try {
       const response = await anthropic.messages.create({
         model: 'claude-sonnet-4-5',
         max_tokens: 1024,
-        system: EXTRACTION_SYSTEM_PROMPT,
+        system: buildExtractionSystemPrompt(options),
         tools: [EXTRACTION_TOOL],
         tool_choice: { type: 'auto' },
         messages: [{

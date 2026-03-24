@@ -1,4 +1,4 @@
-import type { ExtractionProvider } from "./types";
+import type { ExtractionOptions, ExtractionProvider } from "./types";
 import type { ExtractionResult } from "@/types";
 import { saveExtractionLog } from "./log";
 
@@ -29,11 +29,12 @@ const { instance: extraction, name: providerName } = getProvider();
 export async function extractFromText(
   text: string,
   userId: string,
+  options?: ExtractionOptions,
 ): Promise<ExtractionResponse> {
   const start = Date.now();
   let error: string | null = null;
 
-  const { result, rawParsed } = await extraction.extractFromText(text);
+  const { result, rawParsed } = await extraction.extractFromText(text, options);
   const durationMs = Date.now() - start;
 
   if (result.confidence === 0 && !result.payee_name) {
@@ -60,6 +61,7 @@ export async function extractFromImage(
   base64Image: string,
   mimeType: string,
   userId: string,
+  options?: ExtractionOptions,
 ): Promise<ExtractionResponse> {
   const start = Date.now();
   let error: string | null = null;
@@ -67,6 +69,7 @@ export async function extractFromImage(
   const { result, rawParsed } = await extraction.extractFromImage(
     base64Image,
     mimeType,
+    options,
   );
   const durationMs = Date.now() - start;
 
@@ -94,6 +97,7 @@ export async function extractFromDocument(
   base64Doc: string,
   mimeType: string,
   userId: string,
+  options?: ExtractionOptions,
 ): Promise<ExtractionResponse> {
   const start = Date.now();
   let error: string | null = null;
@@ -101,6 +105,7 @@ export async function extractFromDocument(
   const { result, rawParsed } = await extraction.extractFromDocument(
     base64Doc,
     mimeType,
+    options,
   );
   const durationMs = Date.now() - start;
 

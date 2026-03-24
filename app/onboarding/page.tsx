@@ -9,7 +9,7 @@ export default async function OnboardingPage() {
 
   const { data: settings } = await supabase
     .from('user_settings')
-    .select('display_name, preferred_language, default_privacy_level, onboarding_completed')
+    .select('display_name, preferred_language, onboarding_completed')
     .eq('user_id', user.id)
     .single()
 
@@ -32,7 +32,6 @@ export default async function OnboardingPage() {
           <OnboardingForm
             displayName={settings?.display_name ?? emailName}
             preferredLanguage={settings?.preferred_language ?? 'en'}
-            defaultPrivacyLevel={settings?.default_privacy_level ?? 'strict'}
           />
         </div>
       </div>

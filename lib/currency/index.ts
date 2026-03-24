@@ -80,7 +80,7 @@ export function aggregateByCurrency(
   let totalInEur = 0
   const breakdown: CurrencyBreakdown[] = []
 
-  for (const [currency, { total, count }] of groups) {
+  for (const [currency, { total, count }] of Array.from(groups)) {
     const rounded = Math.round(total * 100) / 100
     breakdown.push({
       currency,

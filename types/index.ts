@@ -1,13 +1,12 @@
-export type PrivacyLevel = 'strict' | 'accuracy'
-
 export interface UserSettings {
   user_id: string
   display_name: string | null
   preferred_language: string
-  default_privacy_level: PrivacyLevel
   salary_day: number | null
   email_inbox_address: string | null
   reminder_days_before: number
+  email_notifications: boolean
+  push_notifications: boolean
   onboarding_completed: boolean
   created_at: string
   updated_at: string
@@ -58,10 +57,13 @@ export interface Payee {
 export interface Reminder {
   id: string
   bill_id: string
+  user_id: string
   remind_at: string
+  kind: 'custom_due' | 'due_7d' | 'due_3d' | 'due_today' | 'payment_followup'
   channel: 'email' | 'push'
   sent_at: string | null
   dismissed_at: string | null
+  created_at: string
 }
 
 export interface ExtractionResult {
@@ -91,6 +93,19 @@ export interface UploadResponse {
   storage_path: string
   needs_review: boolean
   vendor: VendorMatch | null
+}
+
+export type BatchStatus = 'pending' | 'in_progress' | 'completed'
+
+export interface PaymentBatch {
+  id: string
+  user_id: string
+  bill_ids: string[]
+  total_amount: number
+  currency: string
+  status: BatchStatus
+  created_at: string
+  updated_at: string
 }
 
 export type BillFormData = Record<string, unknown>

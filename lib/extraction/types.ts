@@ -5,13 +5,29 @@ export interface ExtractionProviderResult {
   rawParsed: Record<string, unknown>
 }
 
-export interface ExtractionProvider {
-  extractFromText(text: string): Promise<ExtractionProviderResult>
-  extractFromImage(base64Image: string, mimeType: string): Promise<ExtractionProviderResult>
-  extractFromDocument(base64Doc: string, mimeType: string): Promise<ExtractionProviderResult>
+export interface ExtractionOptions {
+  explanationLanguage?: string | null
 }
 
-export const EXTRACTION_SYSTEM_PROMPT = `You are a Belgian bill payment extraction specialist.
+export interface ExtractionProvider {
+  extractFromText(text: string, options?: ExtractionOptions): Promise<ExtractionProviderResult>
+  extractFromImage(base64Image: string, mimeType: string, options?: ExtractionOptions): Promise<ExtractionProviderResult>
+  extractFromDocument(base64Doc: string, mimeType: string, options?: ExtractionOptions): Promise<ExtractionProviderResult>
+}
+
+function getExplanationLanguageInstruction(language: string | null | undefined): string {
+  switch ((language ?? 'en').toLowerCase()) {
+    case 'fr':
+      return 'Provide the bill explanation in French.'
+    case 'nl':
+      return 'Provide the bill explanation in Dutch.'
+    default:
+      return 'Provide the bill explanation in plain English.'
+  }
+}
+
+export function buildExtractionSystemPrompt(options?: ExtractionOptions): string {
+  return `You are a Belgian bill payment extraction specialist.
 Extract payment information from Belgian invoices, which may be in Dutch, French, or English.
 
 Belgian bills have these key characteristics:
@@ -28,8 +44,7 @@ Fluvius, Ethias, AG Insurance, mutualités, commune/gemeente taxes, immobilière
 Always extract ALL payment-critical fields. If a structured communication is present, it is the
 most important field — a wrong code means the payment bounces.
 
-Provide a plain English explanation of what this bill is for, suitable for an expat who may not
-read Dutch or French. Keep it to 1-2 sentences.
+${getExplanationLanguageInstruction(options?.explanationLanguage)} The explanation should still be suitable for an expat and stay within 1-2 sentences.
 
 Return a confidence score 0.0-1.0 based on how clearly the fields were visible in the source.
 
@@ -39,6 +54,7 @@ IMPORTANT: In the "extraction_notes" field, explain your reasoning step by step:
 - Which fields are missing and why? (e.g. "no IBAN found in the text", "amount unclear because multiple totals present")
 - If confidence is below 0.7, explain what made extraction difficult.
 This helps the developer debug extraction failures.`
+}
 
 export const EXTRACTION_JSON_SCHEMA = {
   type: 'object' as const,
@@ -51,7 +67,7 @@ export const EXTRACTION_JSON_SCHEMA = {
     iban: { type: 'string', description: 'IBAN bank account number with spaces removed' },
     bic: { type: 'string', description: 'BIC/SWIFT code' },
     language_detected: { type: 'string', description: 'Primary language of the bill: nl, fr, en, de' },
-    explanation: { type: 'string', description: 'Plain English 1-2 sentence explanation of what this bill is for' },
+    explanation: { type: 'string', description: 'A 1-2 sentence explanation of what this bill is for in the requested explanation language' },
     confidence: { type: 'number', description: 'Confidence score 0.0-1.0' },
     raw_text_snippet: { type: 'string', description: 'The most relevant 100-char snippet from the source containing payment details' },
     extraction_notes: { type: 'string', description: 'Step-by-step reasoning: what was found, what was missing and why, what made extraction difficult' },

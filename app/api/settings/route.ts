@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 
 const VALID_LANGUAGES = ['en', 'fr', 'nl']
-const VALID_PRIVACY_LEVELS = ['strict', 'accuracy']
 
 export async function PATCH(request: NextRequest) {
   const supabase = createServerSupabaseClient()
@@ -20,9 +19,6 @@ export async function PATCH(request: NextRequest) {
   if ('preferred_language' in body && VALID_LANGUAGES.includes(body.preferred_language)) {
     updates.preferred_language = body.preferred_language
   }
-  if ('default_privacy_level' in body && VALID_PRIVACY_LEVELS.includes(body.default_privacy_level)) {
-    updates.default_privacy_level = body.default_privacy_level
-  }
   if ('salary_day' in body) {
     const day = Number(body.salary_day)
     updates.salary_day = day >= 1 && day <= 31 ? day : null
@@ -30,6 +26,12 @@ export async function PATCH(request: NextRequest) {
   if ('reminder_days_before' in body) {
     const days = Number(body.reminder_days_before)
     updates.reminder_days_before = days >= 0 && days <= 30 ? days : 3
+  }
+  if ('email_notifications' in body) {
+    updates.email_notifications = body.email_notifications === true
+  }
+  if ('push_notifications' in body) {
+    updates.push_notifications = body.push_notifications === true
   }
   if (body.onboarding_completed === true) {
     updates.onboarding_completed = true

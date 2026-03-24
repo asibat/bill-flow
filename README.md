@@ -68,9 +68,94 @@ cp .env.example .env.local
 
 ```bash
 # Create .env.local with all your keys (copy from .env.example)
-npm run dev
-# Open http://localhost:3000
+npm run supabase:start
+npm run dev:3002
+# Open http://localhost:3002
 ```
+
+This repo is configured to use a non-default local Supabase port set so it can run alongside another local Supabase project:
+
+- API: `http://127.0.0.1:55321`
+- DB: `postgresql://postgres:postgres@127.0.0.1:55322/postgres`
+- Studio: `http://127.0.0.1:55323`
+- Inbucket: `http://127.0.0.1:55324`
+
+Useful commands:
+
+```bash
+npm run supabase:start
+npm run supabase:status
+npm run supabase:stop
+npm run dev:3002
+npm run local:inboxes
+```
+
+### PWA + Push Setup
+
+To enable phone install and browser push notifications, generate VAPID keys once:
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+Then add the output to `.env.local` and your production env:
+
+```env
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=...
+VAPID_PRIVATE_KEY=...
+VAPID_SUBJECT=mailto:hello@billflow.app
+```
+
+After deployment:
+
+1. Open BillFlow in Safari/Chrome on your phone
+2. Install it to your home screen
+3. Go to Settings in the app
+4. Enable push notifications and send a test push
+
+### Local Email Ingestion
+
+Recommended local setup:
+
+```bash
+# 1. Run BillFlow against local Supabase
+npm run supabase:start
+npm run dev:3002
+
+# 2. Expose localhost to Resend
+ngrok http 3002
+```
+
+Then point the Resend inbound webhook to:
+
+```text
+https://<your-ngrok-subdomain>.ngrok.app/api/ingest/email
+```
+
+For local-only manual testing without a signed Resend webhook, set this in `.env.local`:
+
+```env
+RESEND_WEBHOOK_SKIP_VERIFICATION=true
+```
+
+Then you can simulate an inbound email directly:
+
+```bash
+npm run local:inboxes
+TEST_INBOX_EMAIL=bills.12345678@billflow.app npm run test:ingest-email
+```
+
+Optional overrides:
+
+```bash
+PORT=3002 \
+TEST_INBOX_EMAIL=bills.12345678@billflow.app \
+TEST_EMAIL_SUBJECT="Invoice 2026-06" \
+TEST_EMAIL_TEXT="Invoice from Acme Utilities. Amount due: 91.20 EUR. Due date: 2026-06-02. IBAN: BE52 0960 1178 4309. BIC: GKCCBEBB. Structured communication: +++123/4567/89017+++." \
+npm run test:ingest-email
+```
+
+That path uses the same BillFlow ingest logic and writes into your local Supabase instance. In production, keep `RESEND_WEBHOOK_SKIP_VERIFICATION=false` and use the signed `email.received` webhook from Resend.
 
 ---
 
@@ -91,6 +176,9 @@ vercel env add ANTHROPIC_API_KEY
 vercel env add RESEND_API_KEY
 vercel env add RESEND_WEBHOOK_SECRET
 vercel env add NEXT_PUBLIC_APP_URL  # your-app.vercel.app
+vercel env add NEXT_PUBLIC_VAPID_PUBLIC_KEY
+vercel env add VAPID_PRIVATE_KEY
+vercel env add VAPID_SUBJECT
 
 # Redeploy with env vars
 vercel --prod

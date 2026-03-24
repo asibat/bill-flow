@@ -1,6 +1,6 @@
 # BillFlow Architecture
 
-Belgian bill management app for expats. Extracts payment details from uploaded bills and email forwards using AI, with privacy controls and deduplication.
+Belgian bill management app for expats. Extracts payment details from uploaded bills and email forwards using AI, with deduplication and review before save.
 
 ## System Context
 
@@ -13,28 +13,25 @@ Belgian bill management app for expats. Extracts payment details from uploaded b
                         │  │ Router │  │ /api/upload     │  │
                         │  │        │  │ /api/bills      │  │
                         │  │        │  │ /api/ingest     │  │
-                        │  │        │  │ /api/pii        │  │
                         │  │        │  │ /api/recurring  │  │
                         │  │        │  │ /api/analytics  │  │
                         │  └────────┘  └────────┬────────┘  │
                         └───────────────────────┼───────────┘
                                                 │
-                    ┌───────────────┬────────────┼────────────┐
-                    ▼               ▼            ▼            ▼
-              ┌──────────┐  ┌────────────┐ ┌─────────┐ ┌──────────────┐
-              │ Supabase │  │ Gemini /   │ │ Resend  │ │ PII Service  │
-              │ (DB +    │  │ Claude API │ │ (Email) │ │ (Python/     │
-              │ Storage) │  │ (Extract)  │ │         │ │  FastAPI)    │
-              └──────────┘  └────────────┘ └─────────┘ │ OCR + PII   │
-                                                        │ Detection   │
-                                                        └──────────────┘
+                    ┌───────────────┬────────────┬─────────┐
+                    ▼               ▼            ▼
+              ┌──────────┐  ┌────────────┐ ┌─────────┐
+              │ Supabase │  │ Gemini /   │ │ Resend  │
+              │ (DB +    │  │ Claude API │ │ (Email) │
+              │ Storage) │  │ (Extract)  │ │         │
+              └──────────┘  └────────────┘ └─────────┘
 ```
 
 ## Core Flows
 
-### 1. Bill Upload (with Privacy Protection)
+### 1. Bill Upload
 
-The upload flow runs direct extraction first, then scans for PII. The user chooses between privacy-first (redacted) or maximum accuracy (direct). When OCR confidence is low, a side-by-side comparison helps the user pick the best fields from either extraction.
+The upload flow stores the file, runs extraction, and sends the user straight to a review screen. The MVP keeps this path simple and avoids a secondary privacy/redaction branch.
 
 ```
 User uploads file
@@ -47,57 +44,9 @@ User uploads file
          │
          ▼
 ┌──────────────────┐
-│ POST /api/pii/   │──────▶ Proxies to PII Service (Python/FastAPI)
-│      scan        │──────▶ OCR (pytesseract/pdfplumber) + regex PII detection
-└────────┬─────────┘
-         │
-         ├── No PII found ──▶ Go to Review step
-         │
-         ▼ PII found
-┌──────────────────┐
-│ Privacy Choice   │  User picks one of two modes:
-└────────┬─────────┘
-         │
-         ├── 🎯 Maximum Accuracy ──▶ Use direct extraction, go to Review
-         │
-         ▼ 🔒 Strict Privacy
-┌──────────────────┐
-│ Redaction Preview│  User sees highlighted PII with per-item toggle
-│ (client-side)    │  Can select which items to redact
-└────────┬─────────┘
-         │
-         ▼ Approve redactions
-┌──────────────────┐
-│ POST /api/pii/   │──────▶ Send REDACTED text to Gemini
-│    extract       │        (AI never sees personal data)
-└────────┬─────────┘
-         │
-         ├── OCR confidence >= 80% ──▶ Use redacted extraction, go to Review
-         │
-         ▼ OCR confidence < 80%
-┌──────────────────────────────────────────────────┐
-│ Side-by-Side Comparison                          │
-│                                                  │
-│  ┌─────────────────┐    ┌─────────────────┐      │
-│  │ 🔒 Redacted     │ vs │ 🎯 Direct       │      │
-│  │ (privacy-first) │    │ (full image)    │      │
-│  └─────────────────┘    └─────────────────┘      │
-│                                                  │
-│  User clicks cells to pick best value per field  │
-│  Fields that differ are highlighted              │
-│  Default: prefer redacted unless field is empty  │
-└────────┬─────────────────────────────────────────┘
-         │
-         ▼
-┌──────────────────┐
 │ Review & Save    │──────▶ Dedup check ──▶ POST /api/bills
 └──────────────────┘
 ```
-
-**Privacy vs accuracy tradeoff:** The user controls this per bill:
-- **Strict Privacy** — AI only sees redacted OCR text. May lose accuracy on poor scans.
-- **Maximum Accuracy** — AI reads the original image. Best extraction quality.
-- **Comparison view** — Shown when OCR confidence < 80%. User cherry-picks fields from both extractions. Default selection favors privacy (redacted values) unless a field is empty.
 
 ### 2. Email / Doccle Ingestion
 
@@ -226,7 +175,6 @@ All user bills
 | Module | Path | Purpose |
 |--------|------|---------|
 | Extraction | `lib/extraction/` | AI-powered bill data extraction (Gemini/Claude) |
-| PII | `lib/pii/client.ts` + `services/pii-service/` | OCR + PII detection via Python microservice |
 | Dedup | `lib/dedup/` | Bill fingerprinting and duplicate detection |
 | Recurring | `lib/recurring/` | Recurring bill pattern detection |
 | Analytics | `lib/analytics/` | Spending trends, vendor breakdowns |
@@ -256,8 +204,8 @@ Controlled via environment variables:
               │                     │
               ▼                     ▼
         ┌─────────┐          ┌───────────┐
-        │ PII     │          │ Ingest    │
-        │ Scan    │          │ (Doccle / │
+        │ Upload   │         │ Ingest    │
+        │ Review   │         │ (Doccle / │
         │ (opt)   │          │  Generic) │
         └────┬────┘          └─────┬─────┘
              │                     │

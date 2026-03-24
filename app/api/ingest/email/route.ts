@@ -1,41 +1,90 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { addDays, format as formatDate } from 'date-fns'
 import { createServiceClient } from '@/lib/supabase/server'
 import { extractFromText, linkExtractionLogToBill } from '@/lib/extraction'
-import { extractDoccleUrl, parseDoccleHtml, validateStructuredComm, formatStructuredComm } from '@/lib/utils'
-import { matchOrCreateVendor } from '@/lib/vendors/match'
 import { findDuplicates } from '@/lib/dedup'
-import { addDays, differenceInDays, format as formatDate } from 'date-fns'
+import { createBillReminder } from '@/lib/reminders/create'
+import { fetchReceivedEmail, type ReceivedEmail, type ResendWebhookEvent, verifyResendWebhookSignature } from '@/lib/resend/receiving'
+import { extractDoccleUrl, formatStructuredComm, parseDoccleHtml, validateStructuredComm } from '@/lib/utils'
+import { matchOrCreateVendor } from '@/lib/vendors/match'
 
-// Resend sends inbound emails as multipart/form-data
-// https://resend.com/docs/dashboard/emails/inbound-emails
+type LocalSimulationPayload = {
+  to?: string
+  from?: string
+  subject?: string
+  text?: string
+  html?: string
+}
+
+function isLocalSimulationPayload(value: unknown): value is LocalSimulationPayload {
+  if (!value || typeof value !== 'object') return false
+  return 'to' in value || 'subject' in value || 'text' in value || 'html' in value
+}
+
+function shouldSkipVerification(): boolean {
+  return process.env.RESEND_WEBHOOK_SKIP_VERIFICATION === 'true'
+}
+
+function normalizeEmailAddress(value: string | string[] | undefined | null): string {
+  if (!value) return ''
+  return Array.isArray(value) ? (value[0] ?? '') : value
+}
+
 export async function POST(request: NextRequest) {
   try {
-    // Verify webhook signature
-    const signature = request.headers.get('svix-signature') || request.headers.get('x-resend-signature')
-    // In production, verify this against RESEND_WEBHOOK_SECRET
-    // For MVP we skip strict verification but log it
-    
-    const contentType = request.headers.get('content-type') || ''
-    let emailData: Record<string, string> = {}
+    const rawBody = await request.text()
+    const payload = rawBody ? JSON.parse(rawBody) : {}
 
-    if (contentType.includes('application/json')) {
-      emailData = await request.json()
+    let receivedEmail: ReceivedEmail | null = null
+
+    if (isLocalSimulationPayload(payload)) {
+      if (!shouldSkipVerification()) {
+        return NextResponse.json({ error: 'Local simulation payloads require RESEND_WEBHOOK_SKIP_VERIFICATION=true' }, { status: 401 })
+      }
+
+      receivedEmail = {
+        id: `local-${Date.now()}`,
+        to: payload.to ? [payload.to] : [],
+        from: payload.from ?? '',
+        created_at: new Date().toISOString(),
+        subject: payload.subject ?? '',
+        html: payload.html ?? null,
+        text: payload.text ?? null,
+        headers: {},
+        cc: [],
+        bcc: [],
+        reply_to: [],
+        attachments: [],
+        raw: null,
+      }
     } else {
-      const formData = await request.formData()
-      formData.forEach((value, key) => {
-        emailData[key] = value.toString()
-      })
+      const webhookSecret = process.env.RESEND_WEBHOOK_SECRET
+      if (!shouldSkipVerification()) {
+        if (!webhookSecret) {
+          return NextResponse.json({ error: 'RESEND_WEBHOOK_SECRET is not configured' }, { status: 500 })
+        }
+        verifyResendWebhookSignature({
+          payload: rawBody,
+          headers: request.headers,
+          webhookSecret,
+        })
+      }
+
+      const event = payload as ResendWebhookEvent
+      if (event.type !== 'email.received' || !event.data?.email_id) {
+        return NextResponse.json({ ok: true, ignored: true })
+      }
+
+      receivedEmail = await fetchReceivedEmail(event.data.email_id)
     }
 
-    const toAddress = emailData.to || emailData.envelope_to || ''
-    const fromAddress = emailData.from || ''
-    const subject = emailData.subject || ''
-    const textBody = emailData.text || emailData.plain || ''
-    const htmlBody = emailData.html || ''
+    const toAddress = normalizeEmailAddress(receivedEmail?.to)
+    const fromAddress = normalizeEmailAddress(receivedEmail?.from)
+    const subject = receivedEmail?.subject ?? ''
+    const textBody = receivedEmail?.text ?? ''
+    const htmlBody = receivedEmail?.html ?? ''
 
-    // Identify user from their unique inbox address
-    // Format: bills.{userId_first8}@billflow.app
-    const inboxMatch = toAddress.match(/bills\.([a-f0-9]{8})@/)
+    const inboxMatch = toAddress.match(/bills\.([a-f0-9]{8})@/i)
     if (!inboxMatch) {
       return NextResponse.json({ error: 'Unknown inbox address' }, { status: 400 })
     }
@@ -52,20 +101,18 @@ export async function POST(request: NextRequest) {
     }
 
     const userId = settings.user_id
+    const explanationLanguage = settings.preferred_language ?? 'en'
     const fullText = `${subject}\n${textBody}\n${htmlBody}`
-
-    // Check if this is a Doccle notification
     const doccleUrl = extractDoccleUrl(fullText)
-    
+
     if (doccleUrl) {
-      return await handleDoccleEmail(userId, doccleUrl, fullText, supabase)
-    } else {
-      return await handleGenericEmail(userId, fullText, subject, fromAddress, supabase)
+      return await handleDoccleEmail(userId, doccleUrl, fullText, explanationLanguage, supabase)
     }
 
+    return await handleGenericEmail(userId, fullText, subject, fromAddress, explanationLanguage, supabase)
   } catch (err) {
     console.error('Ingest email error:', err)
-    return NextResponse.json({ error: 'Internal error' }, { status: 500 })
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Internal error' }, { status: 500 })
   }
 }
 
@@ -73,11 +120,10 @@ async function handleDoccleEmail(
   userId: string,
   doccleUrl: string,
   originalText: string,
+  explanationLanguage: string,
   supabase: ReturnType<typeof createServiceClient>
 ) {
-  // Fetch the Doccle direct URL (no auth required)
   let doccleHtml = ''
-  let pdfBuffer: Buffer | null = null
 
   try {
     const pageResponse = await fetch(doccleUrl, {
@@ -92,7 +138,6 @@ async function handleDoccleEmail(
     console.warn('Could not fetch Doccle URL:', e)
   }
 
-  // Parse structured metadata from Doccle HTML, falling back to the email HTML
   const pageMeta = parseDoccleHtml(doccleHtml)
   const emailMeta = parseDoccleHtml(originalText)
   const htmlMeta = {
@@ -101,30 +146,24 @@ async function handleDoccleEmail(
     payee: pageMeta.payee ?? emailMeta.payee,
     status: pageMeta.status ?? emailMeta.status,
   }
-  console.log('[ingest:doccle] pageMeta:', pageMeta)
-  console.log('[ingest:doccle] emailMeta:', emailMeta)
-  console.log('[ingest:doccle] merged htmlMeta:', htmlMeta)
 
-  // Try to find and download the PDF
   let pdfPath: string | null = null
   try {
     const pdfLinkMatch = doccleHtml.match(/href="([^"]+\.pdf[^"]*)"/)
     const printLinkMatch = doccleHtml.match(/(?:open\/print|newWindow)[^"]*"([^"]+)"/)
     const pdfUrl = pdfLinkMatch?.[1] || printLinkMatch?.[1]
-    
+
     if (pdfUrl) {
       const fullPdfUrl = pdfUrl.startsWith('http') ? pdfUrl : `https://secure.doccle.be${pdfUrl}`
       const pdfResponse = await fetch(fullPdfUrl, { signal: AbortSignal.timeout(15000) })
       if (pdfResponse.ok) {
         const arrayBuffer = await pdfResponse.arrayBuffer()
-        pdfBuffer = Buffer.from(arrayBuffer)
-        
-        // Store PDF in Supabase Storage
+        const pdfBuffer = Buffer.from(arrayBuffer)
         const pdfFilename = `${userId}/${Date.now()}-doccle.pdf`
         const { error: storageError } = await supabase.storage
           .from('bill-documents')
           .upload(pdfFilename, pdfBuffer, { contentType: 'application/pdf' })
-        
+
         if (!storageError) pdfPath = pdfFilename
       }
     }
@@ -132,7 +171,6 @@ async function handleDoccleEmail(
     console.warn('Could not download Doccle PDF:', e)
   }
 
-  // Extract with Claude from the full text + HTML metadata
   const combinedText = `
 DOCCLE BILL NOTIFICATION
 From: ${originalText.slice(0, 1000)}
@@ -140,10 +178,9 @@ From: ${originalText.slice(0, 1000)}
 Doccle page content: ${doccleHtml.slice(0, 4000)}
   `.trim()
 
-  const extractionResponse = await extractFromText(combinedText, userId)
+  const extractionResponse = await extractFromText(combinedText, userId, { explanationLanguage })
   const extraction = extractionResponse.result
 
-  // Validate structured communication
   let structuredCommValid: boolean | null = null
   if (extraction.structured_comm) {
     const formatted = formatStructuredComm(extraction.structured_comm)
@@ -151,33 +188,29 @@ Doccle page content: ${doccleHtml.slice(0, 4000)}
     structuredCommValid = validateStructuredComm(formatted)
   }
 
-  // Match or create vendor by IBAN
   const vendor = await matchOrCreateVendor(supabase, userId, extraction)
   if (vendor && !extraction.bic && vendor.bic) {
     extraction.bic = vendor.bic
   }
 
-  // Cross-check amount with HTML metadata — flag if disagreement
   const needsReview = !!htmlMeta.amount && !!extraction.amount &&
     Math.abs(htmlMeta.amount - (extraction.amount ?? 0)) > 0.01
 
-  // Dedup check
-  const payeeName = vendor?.payee_name || extraction.payee_name || htmlMeta.payee || 'Unknown (Doccle)'
+  const sourcePayeeName = extraction.payee_name || htmlMeta.payee || 'Unknown (Doccle)'
   const duplicates = await findDuplicates(supabase, userId, {
-    payee_name: payeeName,
+    payee_name: sourcePayeeName,
     amount: extraction.amount ?? htmlMeta.amount ?? null,
     due_date: extraction.due_date || htmlMeta.dueDate || null,
     structured_comm: extraction.structured_comm,
   })
   if (duplicates.length > 0) {
-    console.warn('[ingest:doccle] Duplicate detected, skipping insert:', duplicates[0].id)
     return NextResponse.json({ success: true, bill_id: duplicates[0].id, source: 'doccle', duplicate: true })
   }
 
   const { data: bill, error } = await supabase.from('bills').insert({
     user_id: userId,
     source: 'doccle',
-    payee_name: payeeName,
+    payee_name: sourcePayeeName,
     payee_id: vendor?.payee_id || null,
     amount: extraction.amount ?? htmlMeta.amount ?? 0,
     currency: extraction.currency ?? 'EUR',
@@ -200,25 +233,16 @@ Doccle page content: ${doccleHtml.slice(0, 4000)}
     return NextResponse.json({ error: 'DB insert failed' }, { status: 500 })
   }
 
-  // Link extraction log to the created bill
   if (extractionResponse.logId && bill?.id) {
     await linkExtractionLogToBill(extractionResponse.logId, bill.id)
   }
 
-  // Auto-create reminder
   if (bill?.due_date) {
-    const dueDate = new Date(bill.due_date)
-    const reminderDate = new Date(dueDate)
-    reminderDate.setDate(reminderDate.getDate() - 3)
-    
-    if (differenceInDays(reminderDate, new Date()) > 0) {
-      await supabase.from('reminders').insert({
-        bill_id: bill.id,
-        user_id: userId,
-        remind_at: reminderDate.toISOString(),
-        channel: 'email',
-      })
-    }
+    await createBillReminder(supabase, {
+      billId: bill.id,
+      userId,
+      dueDate: bill.due_date,
+    })
   }
 
   return NextResponse.json({ success: true, bill_id: bill?.id, source: 'doccle' })
@@ -229,9 +253,10 @@ async function handleGenericEmail(
   fullText: string,
   subject: string,
   fromAddress: string,
+  explanationLanguage: string,
   supabase: ReturnType<typeof createServiceClient>
 ) {
-  const extractionResponse = await extractFromText(fullText, userId)
+  const extractionResponse = await extractFromText(fullText, userId, { explanationLanguage })
   const extraction = extractionResponse.result
 
   let structuredCommValid: boolean | null = null
@@ -240,29 +265,26 @@ async function handleGenericEmail(
     structuredCommValid = validateStructuredComm(extraction.structured_comm)
   }
 
-  // Match or create vendor by IBAN
   const vendor = await matchOrCreateVendor(supabase, userId, extraction)
   if (vendor && !extraction.bic && vendor.bic) {
     extraction.bic = vendor.bic
   }
 
-  // Dedup check
-  const emailPayeeName = vendor?.payee_name || extraction.payee_name || subject || fromAddress || 'Unknown'
+  const sourcePayeeName = extraction.payee_name || subject || fromAddress || 'Unknown'
   const duplicates = await findDuplicates(supabase, userId, {
-    payee_name: emailPayeeName,
+    payee_name: sourcePayeeName,
     amount: extraction.amount,
     due_date: extraction.due_date,
     structured_comm: extraction.structured_comm,
   })
   if (duplicates.length > 0) {
-    console.warn('[ingest:email] Duplicate detected, skipping insert:', duplicates[0].id)
     return NextResponse.json({ success: true, bill_id: duplicates[0].id, source: 'email', duplicate: true })
   }
 
   const { data: bill, error } = await supabase.from('bills').insert({
     user_id: userId,
     source: 'email',
-    payee_name: emailPayeeName,
+    payee_name: sourcePayeeName,
     payee_id: vendor?.payee_id || null,
     amount: extraction.amount ?? 0,
     currency: extraction.currency ?? 'EUR',
@@ -280,9 +302,16 @@ async function handleGenericEmail(
 
   if (error) return NextResponse.json({ error: 'DB insert failed' }, { status: 500 })
 
-  // Link extraction log to the created bill
   if (extractionResponse.logId && bill?.id) {
     await linkExtractionLogToBill(extractionResponse.logId, bill.id)
+  }
+
+  if (bill?.due_date) {
+    await createBillReminder(supabase, {
+      billId: bill.id,
+      userId,
+      dueDate: bill.due_date,
+    })
   }
 
   return NextResponse.json({ success: true, bill_id: bill?.id, source: 'email' })

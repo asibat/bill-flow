@@ -67,7 +67,7 @@ export function detectRecurringPatterns(bills: Bill[]): RecurringPattern[] {
 
   const patterns: RecurringPattern[] = []
 
-  for (const [, groupBills] of groups) {
+  for (const [, groupBills] of Array.from(groups)) {
     if (groupBills.length < 2) continue
 
     const dueDates = groupBills

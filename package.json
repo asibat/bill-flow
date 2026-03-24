@@ -4,8 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:3002": "PORT=3002 next dev",
     "build": "next build",
     "start": "next start",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "supabase:status": "supabase status",
+    "local:inboxes": "zsh -lc 'set -a && source .env.local && set +a && node -e \"fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/user_settings?select=user_id,email_inbox_address,preferred_language&order=created_at.asc`,{headers:{apikey:process.env.SUPABASE_SERVICE_ROLE_KEY,Authorization:`Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`}}).then(async r=>{const data=await r.json(); if(!Array.isArray(data)){console.error(data); process.exit(1)} for (const row of data){console.log(`${row.user_id}  ${row.email_inbox_address}  ${row.preferred_language}`)}}).catch(e=>{console.error(e);process.exit(1)})\"'",
+    "test:ingest-email": "node -e \"const port=process.env.PORT||'3002'; const inbox=process.env.TEST_INBOX_EMAIL||'bills.12345678@billflow.app'; const subject=process.env.TEST_EMAIL_SUBJECT||'Invoice test'; const text=process.env.TEST_EMAIL_TEXT||'Invoice from Acme Utilities. Amount due: 44.25 EUR. Due date: 2026-04-15. IBAN: BE52 0960 1178 4309. BIC: GKCCBEBB. Structured communication: +++260/2754/48343+++.'; fetch(`http://127.0.0.1:${port}/api/ingest/email`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:inbox,from:'Acme Billing <billing@acme.example>',subject,text,html:''})}).then(async r=>{console.log(r.status); console.log(await r.text())}).catch(e=>{console.error(e); process.exit(1)})\"",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "jest",
@@ -22,6 +28,7 @@
     "react-dom": "^18.3.1",
     "react-dropzone": "^14.2.3",
     "resend": "^3.2.0",
+    "web-push": "^3.6.7",
     "zod": "^3.23.8"
   },
   "devDependencies": {

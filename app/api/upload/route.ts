@@ -8,6 +8,12 @@ export async function POST(request: NextRequest) {
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { data: settings } = await supabase
+    .from('user_settings')
+    .select('preferred_language')
+    .eq('user_id', user.id)
+    .single()
+  const explanationLanguage = settings?.preferred_language ?? 'en'
 
   const formData = await request.formData()
   const file = formData.get('file') as File | null
@@ -35,11 +41,11 @@ export async function POST(request: NextRequest) {
   const base64 = buffer.toString('base64')
   let extractionResponse
   if (mimeType.includes('pdf')) {
-    extractionResponse = await extractFromDocument(base64, 'application/pdf', user.id)
+    extractionResponse = await extractFromDocument(base64, 'application/pdf', user.id, { explanationLanguage })
   } else {
     const validMime = mimeType.includes('png') ? 'image/png' :
                       mimeType.includes('webp') ? 'image/webp' : 'image/jpeg'
-    extractionResponse = await extractFromImage(base64, validMime, user.id)
+    extractionResponse = await extractFromImage(base64, validMime, user.id, { explanationLanguage })
   }
 
   const extraction = extractionResponse.result

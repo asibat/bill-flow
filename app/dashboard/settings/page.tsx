@@ -9,7 +9,7 @@ export default async function SettingsPage() {
 
   const { data: settings } = await supabase
     .from('user_settings')
-    .select('display_name, preferred_language, default_privacy_level, salary_day, reminder_days_before')
+    .select('display_name, preferred_language, salary_day, reminder_days_before, email_notifications, push_notifications')
     .eq('user_id', user.id)
     .single()
 
@@ -20,9 +20,10 @@ export default async function SettingsPage() {
         <SettingsForm
           displayName={settings?.display_name ?? ''}
           preferredLanguage={settings?.preferred_language ?? 'en'}
-          defaultPrivacyLevel={settings?.default_privacy_level ?? 'strict'}
           salaryDay={settings?.salary_day ?? null}
           reminderDaysBefore={settings?.reminder_days_before ?? 3}
+          emailNotifications={settings?.email_notifications ?? true}
+          pushNotifications={settings?.push_notifications ?? false}
         />
       </div>
     </div>

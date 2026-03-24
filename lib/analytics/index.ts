@@ -87,7 +87,7 @@ export function getTopVendors(bills: Bill[], limit = 5): VendorSpending[] {
   const grandTotal = bills.reduce((sum, b) => sum + b.amount, 0)
 
   const vendors: VendorSpending[] = []
-  for (const [payee_name, data] of vendorMap) {
+  for (const [payee_name, data] of Array.from(vendorMap)) {
     vendors.push({
       payee_name,
       total: Math.round(data.total * 100) / 100,
