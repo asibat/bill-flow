@@ -15,6 +15,7 @@ const CreateBillSchema = z.object({
   bic: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
   source: z.enum(['doccle', 'email', 'upload', 'manual']).default('manual'),
+  ingestion_method: z.enum(['doccle_html_pdf', 'email_body_text', 'email_attachment', 'upload_pdf', 'upload_image', 'manual_entry']).optional().nullable(),
   raw_pdf_path: z.string().optional().nullable(),
   extraction_confidence: z.number().optional().nullable(),
   structured_comm_valid: z.boolean().optional().nullable(),

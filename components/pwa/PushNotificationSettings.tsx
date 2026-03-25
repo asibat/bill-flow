@@ -141,28 +141,36 @@ export default function PushNotificationSettings({
 
   if (supportState === 'unsupported') {
     return (
-      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
         Push notifications are not available in this browser. Use email reminders as fallback.
       </div>
     )
   }
 
   return (
-    <div className="space-y-3 rounded-lg border border-gray-200 p-4">
+    <div className="space-y-4 rounded-2xl border border-gray-200 p-4">
       <div>
         <p className="text-sm font-medium text-gray-900">Phone notifications</p>
-        <p className="text-xs text-gray-500 mt-1">
+        <p className="text-xs text-gray-500 mt-1 leading-5">
           Enable browser push after installing BillFlow to your home screen.
         </p>
       </div>
 
-      <div className="text-xs text-gray-500 space-y-1">
-        <p>Permission: {permission}</p>
-        <p>Subscription: {subscriptionState === 'active' ? 'connected' : subscriptionState === 'inactive' ? 'not connected' : 'checking'}</p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <StatusPill
+          label="Permission"
+          value={String(permission)}
+          tone={permission === 'granted' ? 'green' : permission === 'denied' ? 'red' : 'amber'}
+        />
+        <StatusPill
+          label="Subscription"
+          value={subscriptionState === 'active' ? 'connected' : subscriptionState === 'inactive' ? 'not connected' : 'checking'}
+          tone={subscriptionState === 'active' ? 'green' : subscriptionState === 'inactive' ? 'amber' : 'blue'}
+        />
       </div>
 
-      {error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
-      {message && <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700">{message}</div>}
+      {error && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+      {message && <div className="rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-700">{message}</div>}
 
       <div className="flex flex-wrap gap-3">
         <button onClick={enablePush} disabled={busy} className="btn-primary">
@@ -175,6 +183,30 @@ export default function PushNotificationSettings({
           Disable Push
         </button>
       </div>
+    </div>
+  )
+}
+
+function StatusPill({
+  label,
+  value,
+  tone,
+}: {
+  label: string
+  value: string
+  tone: 'green' | 'red' | 'amber' | 'blue'
+}) {
+  const tones = {
+    green: 'border-green-200 bg-green-50 text-green-700',
+    red: 'border-red-200 bg-red-50 text-red-700',
+    amber: 'border-amber-200 bg-amber-50 text-amber-700',
+    blue: 'border-blue-200 bg-blue-50 text-blue-700',
+  }
+
+  return (
+    <div className={`rounded-2xl border px-4 py-3 ${tones[tone]}`}>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] opacity-70">{label}</p>
+      <p className="mt-2 text-sm font-medium">{value}</p>
     </div>
   )
 }

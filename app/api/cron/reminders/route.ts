@@ -132,12 +132,16 @@ export async function GET(request: NextRequest) {
 
       if (dueBills.length > 0) {
         let delivered = false
+        const duePath = dueBills.length === 1 ? `/bills/${dueBills[0].id}` : '/dashboard'
         const { subject, html } = buildReminderEmail(dueBills.map(b => ({
           payee_name: b.payee_name,
           amount: b.amount,
           currency: b.currency,
           due_date: format(new Date(b.due_date), 'd MMM yyyy'),
-        })))
+        })), {
+          path: duePath,
+          label: dueBills.length === 1 ? 'Open bill in BillFlow' : 'View reminders in BillFlow',
+        })
 
         if (emailEnabled && user?.email) {
           const sent = await sendEmail({ to: user.email, subject, html })
@@ -151,7 +155,7 @@ export async function GET(request: NextRequest) {
             body: dueBills.length === 1
               ? `${dueBills[0].amount.toFixed(2)} ${dueBills[0].currency} due ${format(new Date(dueBills[0].due_date), 'd MMM')}`
               : 'Open BillFlow to review your upcoming bills.',
-            url: '/dashboard',
+            url: duePath,
             tag: 'billflow-due-reminders',
           })
           delivered = sentPush > 0 || delivered
@@ -169,12 +173,16 @@ export async function GET(request: NextRequest) {
       const followupList = Array.from(followupBills.values())
       if (followupList.length > 0) {
         let delivered = false
+        const followupPath = followupList.length === 1 ? `/bills/${followupList[0].id}` : '/dashboard'
         const { subject, html } = buildPaymentFollowupEmail(followupList.map(b => ({
           payee_name: b.payee_name,
           amount: b.amount,
           currency: b.currency,
           paid_at: b.paid_at ? format(new Date(b.paid_at), 'd MMM yyyy') : 'Recently',
-        })))
+        })), {
+          path: followupPath,
+          label: followupList.length === 1 ? 'Confirm this bill in BillFlow' : 'Review payments in BillFlow',
+        })
 
         if (emailEnabled && user?.email) {
           const sent = await sendEmail({ to: user.email, subject, html })
@@ -188,7 +196,7 @@ export async function GET(request: NextRequest) {
             body: followupList.length === 1
               ? `Check whether ${followupList[0].amount.toFixed(2)} ${followupList[0].currency} was received.`
               : 'Open BillFlow to confirm your recent payments.',
-            url: '/dashboard',
+            url: followupPath,
             tag: 'billflow-payment-followup',
           })
           delivered = sentPush > 0 || delivered
@@ -256,7 +264,11 @@ export async function GET(request: NextRequest) {
           amount: b.amount,
           currency: b.currency,
           due_date: format(new Date(b.due_date), 'd MMM yyyy'),
-        }))
+        })),
+        {
+          path: bills.length === 1 ? `/bills/${bills[0].id}` : '/dashboard',
+          label: bills.length === 1 ? 'Open overdue bill' : 'Review overdue bills',
+        }
       )
 
       if (emailEnabled && user?.email) {
@@ -268,7 +280,7 @@ export async function GET(request: NextRequest) {
           body: bills.length === 1
             ? `${bills[0].amount.toFixed(2)} ${bills[0].currency} is now overdue.`
             : 'Open BillFlow to review overdue bills.',
-          url: '/dashboard',
+          url: bills.length === 1 ? `/bills/${bills[0].id}` : '/dashboard',
           tag: 'billflow-overdue',
         })
       }

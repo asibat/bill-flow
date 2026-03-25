@@ -14,11 +14,19 @@ export interface UserSettings {
 
 export type BillStatus = 'received' | 'scheduled' | 'payment_sent' | 'confirmed' | 'overdue'
 export type BillSource = 'doccle' | 'email' | 'upload' | 'manual'
+export type BillIngestionMethod =
+  | 'doccle_html_pdf'
+  | 'email_body_text'
+  | 'email_attachment'
+  | 'upload_pdf'
+  | 'upload_image'
+  | 'manual_entry'
 
 export interface Bill {
   id: string
   user_id: string
   source: BillSource
+  ingestion_method?: BillIngestionMethod | null
   payee_name: string
   payee_id: string | null
   amount: number

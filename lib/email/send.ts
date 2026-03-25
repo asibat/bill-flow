@@ -10,6 +10,16 @@ interface SendEmailOptions {
   html: string
 }
 
+interface EmailCtaOptions {
+  path?: string
+  label?: string
+}
+
+function getAbsoluteAppUrl(path = '/dashboard') {
+  const base = process.env.NEXT_PUBLIC_APP_URL ?? 'https://billflow.app'
+  return `${base.replace(/\/$/, '')}${path.startsWith('/') ? path : `/${path}`}`
+}
+
 export async function sendEmail({ to, subject, html }: SendEmailOptions): Promise<{ id: string } | null> {
   try {
     const { data, error } = await resend.emails.send({
@@ -31,7 +41,10 @@ export async function sendEmail({ to, subject, html }: SendEmailOptions): Promis
   }
 }
 
-export function buildReminderEmail(bills: Array<{ payee_name: string; amount: number; currency: string; due_date: string }>): { subject: string; html: string } {
+export function buildReminderEmail(
+  bills: Array<{ payee_name: string; amount: number; currency: string; due_date: string }>,
+  options: EmailCtaOptions = {}
+): { subject: string; html: string } {
   const count = bills.length
   const subject = count === 1
     ? `Reminder: ${bills[0].payee_name} bill due ${bills[0].due_date}`
@@ -44,6 +57,9 @@ export function buildReminderEmail(bills: Array<{ payee_name: string; amount: nu
       <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right">${b.due_date}</td>
     </tr>
   `).join('')
+
+  const ctaLabel = options.label ?? 'View in BillFlow'
+  const ctaUrl = getAbsoluteAppUrl(options.path)
 
   const html = `
     <div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px">
@@ -61,9 +77,9 @@ export function buildReminderEmail(bills: Array<{ payee_name: string; amount: nu
         </thead>
         <tbody>${rows}</tbody>
       </table>
-      <a href="${process.env.NEXT_PUBLIC_APP_URL ?? 'https://billflow.app'}/dashboard"
+      <a href="${ctaUrl}"
          style="display:inline-block;padding:10px 20px;background:#4f46e5;color:white;border-radius:8px;text-decoration:none;font-weight:500">
-        View in BillFlow
+        ${ctaLabel}
       </a>
       <p style="color:#999;font-size:12px;margin-top:24px">
         You can change your reminder settings in BillFlow Settings.
@@ -74,7 +90,10 @@ export function buildReminderEmail(bills: Array<{ payee_name: string; amount: nu
   return { subject, html }
 }
 
-export function buildPaymentFollowupEmail(bills: Array<{ payee_name: string; amount: number; currency: string; paid_at: string }>): { subject: string; html: string } {
+export function buildPaymentFollowupEmail(
+  bills: Array<{ payee_name: string; amount: number; currency: string; paid_at: string }>,
+  options: EmailCtaOptions = {}
+): { subject: string; html: string } {
   const count = bills.length
   const subject = count === 1
     ? `Check payment receipt: ${bills[0].payee_name}`
@@ -87,6 +106,9 @@ export function buildPaymentFollowupEmail(bills: Array<{ payee_name: string; amo
       <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right">${b.paid_at}</td>
     </tr>
   `).join('')
+
+  const ctaLabel = options.label ?? 'Review in BillFlow'
+  const ctaUrl = getAbsoluteAppUrl(options.path)
 
   const html = `
     <div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px">
@@ -105,9 +127,9 @@ export function buildPaymentFollowupEmail(bills: Array<{ payee_name: string; amo
         </thead>
         <tbody>${rows}</tbody>
       </table>
-      <a href="${process.env.NEXT_PUBLIC_APP_URL ?? 'https://billflow.app'}/dashboard"
+      <a href="${ctaUrl}"
          style="display:inline-block;padding:10px 20px;background:#1f2937;color:white;border-radius:8px;text-decoration:none;font-weight:500">
-        Review in BillFlow
+        ${ctaLabel}
       </a>
     </div>
   `
@@ -115,7 +137,10 @@ export function buildPaymentFollowupEmail(bills: Array<{ payee_name: string; amo
   return { subject, html }
 }
 
-export function buildOverdueEmail(bills: Array<{ payee_name: string; amount: number; currency: string; due_date: string }>): { subject: string; html: string } {
+export function buildOverdueEmail(
+  bills: Array<{ payee_name: string; amount: number; currency: string; due_date: string }>,
+  options: EmailCtaOptions = {}
+): { subject: string; html: string } {
   const count = bills.length
   const subject = count === 1
     ? `Overdue: ${bills[0].payee_name} was due ${bills[0].due_date}`
@@ -128,6 +153,9 @@ export function buildOverdueEmail(bills: Array<{ payee_name: string; amount: num
       <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right;color:#dc2626">${b.due_date}</td>
     </tr>
   `).join('')
+
+  const ctaLabel = options.label ?? 'View in BillFlow'
+  const ctaUrl = getAbsoluteAppUrl(options.path)
 
   const html = `
     <div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px">
@@ -145,9 +173,9 @@ export function buildOverdueEmail(bills: Array<{ payee_name: string; amount: num
         </thead>
         <tbody>${rows}</tbody>
       </table>
-      <a href="${process.env.NEXT_PUBLIC_APP_URL ?? 'https://billflow.app'}/dashboard"
+      <a href="${ctaUrl}"
          style="display:inline-block;padding:10px 20px;background:#dc2626;color:white;border-radius:8px;text-decoration:none;font-weight:500">
-        View in BillFlow
+        ${ctaLabel}
       </a>
     </div>
   `

@@ -114,6 +114,7 @@ export function UploadForm({ onBack }: UploadFormProps) {
           structured_comm_valid: structured ? validateStructuredComm(structured) : null,
           raw_pdf_path: storagePath,
           source: 'upload',
+          ingestion_method: storagePath.endsWith('.pdf') ? 'upload_pdf' : 'upload_image',
           payee_id: vendor?.payee_id || null,
           ...(force ? { force: true } : {}),
         }),
@@ -127,7 +128,8 @@ export function UploadForm({ onBack }: UploadFormProps) {
         const body = await res.json().catch(() => ({}))
         throw new Error(body.error || `Save failed (${res.status})`)
       }
-      router.push('/dashboard')
+      router.refresh()
+      router.replace('/dashboard')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed')
     } finally {
@@ -142,6 +144,20 @@ export function UploadForm({ onBack }: UploadFormProps) {
       <button onClick={step === 'upload' ? onBack : resetUpload} className="text-sm text-brand-600 hover:underline">
         &larr; {step === 'upload' ? 'Back' : 'Start Over'}
       </button>
+
+      <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+          {step === 'upload' ? 'Document Upload' : 'Review Extraction'}
+        </p>
+        <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-900">
+          {step === 'upload' ? 'Upload the bill and let BillFlow extract the details.' : 'Check the extracted payment details before saving.'}
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-slate-500">
+          {step === 'upload'
+            ? 'PDFs and screenshots work best. You can still correct any field before the bill is saved.'
+            : 'Save once the payee, amount, due date, and transfer reference all look correct.'}
+        </p>
+      </div>
 
       {error && (
         <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
@@ -193,9 +209,9 @@ export function UploadForm({ onBack }: UploadFormProps) {
             </div>
           )}
 
-          <div className="card p-6">
+          <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm md:p-6">
             <BillFormFields form={form} setForm={setForm} />
-            <div className="mt-6 flex gap-3">
+            <div className="mt-6 flex flex-wrap gap-3">
               <button onClick={() => save(false)} disabled={saving} className="btn-primary">
                 {saving ? 'Saving...' : 'Save Bill'}
               </button>

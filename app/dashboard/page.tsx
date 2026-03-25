@@ -9,6 +9,8 @@ import Link from 'next/link'
 import type { Bill } from '@/types'
 import RemindersList from './_components/RemindersList'
 
+export const dynamic = 'force-dynamic'
+
 export default async function DashboardPage() {
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -57,165 +59,192 @@ export default async function DashboardPage() {
   const topVendors = showAnalytics ? getTopVendors(allBills, 5) : []
   const trend = showAnalytics ? getSpendingTrend(monthlySpending) : null
   const totalPaid = paid.reduce((s, b) => s + b.amount, 0)
+  const focusCount = overdue.length + dueThisWeek.length + needsReview.length
+  const nextDueBill = unpaid[0] ?? null
 
   return (
-    <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-500 mt-1">Your Belgian bill overview</p>
-      </div>
+    <div className="px-4 py-5 md:px-8 md:py-8">
+      <div className="mx-auto max-w-6xl space-y-8">
+        <section className="rounded-[28px] border border-slate-200 bg-white/90 p-5 shadow-sm md:p-7">
+          <div className="grid gap-6 lg:grid-cols-[1.4fr_0.9fr]">
+            <div>
+              <div className="inline-flex items-center rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-brand-700">
+                Control Center
+              </div>
+              <h1 className="mt-4 text-3xl font-bold tracking-tight text-slate-900 md:text-4xl">Keep the urgent bills moving.</h1>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 md:text-base">
+                BillFlow keeps today’s obligations, payment follow-ups, and upcoming due dates in one place so you can act fast without losing the bigger picture.
+              </p>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <StatCard
-          label="Total Outstanding"
-          value={unpaidBreakdown.length <= 1 ? formatAmount(totalUnpaidEur) : formatAmount(totalUnpaidEur) + ' equiv.'}
-          sub={unpaidBreakdown.length > 1
-            ? unpaidBreakdown.map(b => b.formatted).join(' + ')
-            : `${unpaid.length} bills`}
-          color="blue"
-        />
-        <StatCard label="Overdue" value={String(overdue.length)} sub={overdue.length ? formatAmount(overdue.reduce((s,b)=>s+b.amount,0)) : 'All good!'} color={overdue.length ? 'red' : 'green'} />
-        <StatCard label="Due This Week" value={String(dueThisWeek.length)} sub={dueThisWeek.length ? formatAmount(dueThisWeek.reduce((s,b)=>s+b.amount,0)) : 'Nothing urgent'} color={dueThisWeek.length ? 'amber' : 'green'} />
-        <StatCard
-          label="Paid"
-          value={String(paid.length)}
-          sub={paid.length ? formatAmount(totalPaid) : 'No payments yet'}
-          color="green"
-        />
-      </div>
+              <div className="mt-5 flex flex-wrap gap-3">
+                <Link href="/bills/new" className="btn-primary">Add Bill</Link>
+                <Link href="/bills/batch" className="btn-secondary">Start Payment Session</Link>
+                <Link href="/bills" className="btn-secondary">Review All Bills</Link>
+              </div>
+            </div>
 
-      {/* Reminders & Salary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        {/* Upcoming reminders */}
-        <div className="md:col-span-2">
-          <RemindersList reminders={visibleReminders} />
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+              <FocusCard
+                eyebrow="Immediate focus"
+                title={
+                  overdue.length > 0
+                    ? `${overdue.length} overdue bill${overdue.length === 1 ? '' : 's'}`
+                    : dueThisWeek.length > 0
+                      ? `${dueThisWeek.length} bill${dueThisWeek.length === 1 ? '' : 's'} due this week`
+                      : 'No urgent bills'
+                }
+                detail={
+                  overdue.length > 0
+                    ? `${formatAmount(overdue.reduce((s, b) => s + b.amount, 0))} needs attention now`
+                    : nextDueBill
+                      ? `${nextDueBill.payee_name} is next due ${format(new Date(nextDueBill.due_date), 'd MMM')}`
+                      : 'You are caught up for now'
+                }
+                tone={overdue.length > 0 ? 'red' : dueThisWeek.length > 0 ? 'amber' : 'green'}
+              />
+              <FocusCard
+                eyebrow="Review queue"
+                title={needsReview.length > 0 ? `${needsReview.length} bill${needsReview.length === 1 ? '' : 's'} need review` : 'Review queue is clear'}
+                detail={needsReview.length > 0 ? 'Open the flagged bills and confirm the extracted details.' : 'New uploads and forwards are being processed cleanly.'}
+                tone={needsReview.length > 0 ? 'amber' : 'blue'}
+              />
+            </div>
+          </div>
+        </section>
+
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+          <StatCard
+            label="Total Outstanding"
+            value={unpaidBreakdown.length <= 1 ? formatAmount(totalUnpaidEur) : `${formatAmount(totalUnpaidEur)} equiv.`}
+            sub={unpaidBreakdown.length > 1 ? unpaidBreakdown.map(b => b.formatted).join(' + ') : `${unpaid.length} open bills`}
+            color="blue"
+          />
+          <StatCard
+            label="Action Items"
+            value={String(focusCount)}
+            sub={focusCount > 0 ? 'Urgent or review work waiting' : 'Nothing blocking right now'}
+            color={focusCount > 0 ? 'amber' : 'green'}
+          />
+          <StatCard label="Due This Week" value={String(dueThisWeek.length)} sub={dueThisWeek.length ? formatAmount(dueThisWeek.reduce((s,b)=>s+b.amount,0)) : 'Nothing urgent'} color={dueThisWeek.length ? 'amber' : 'green'} />
+          <StatCard
+            label="Paid"
+            value={String(paid.length)}
+            sub={paid.length ? formatAmount(totalPaid) : 'No payments yet'}
+            color="green"
+          />
         </div>
 
-        {/* Salary countdown + split view */}
-        {userSettings?.salary_day && (
-          <div className="card p-5">
-            <h2 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Next Payday</h2>
-            <SalaryCountdown salaryDay={userSettings.salary_day} totalDue={totalUnpaidEur} />
-            <SalarySplit salaryDay={userSettings.salary_day} bills={unpaid} />
+        <div className="grid gap-4 xl:grid-cols-[1.6fr_1fr]">
+          <div className="space-y-4">
+            <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+              <div className="min-w-0">
+                <RemindersList reminders={visibleReminders} />
+              </div>
+              {userSettings?.salary_day && (
+                <div className="card p-5">
+                  <h2 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Next Payday</h2>
+                  <SalaryCountdown salaryDay={userSettings.salary_day} totalDue={totalUnpaidEur} />
+                  <SalarySplit salaryDay={userSettings.salary_day} bills={unpaid} />
+                </div>
+              )}
+            </div>
+
+            {trend && (
+              <div className="card p-5">
+                <div className="flex items-start justify-between gap-4 mb-4">
+                  <div>
+                    <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Monthly Spending</h2>
+                    <p className="mt-1 text-sm text-gray-500">A quick view of how your recent bill volume is moving.</p>
+                  </div>
+                  <TrendBadge trend={trend} />
+                </div>
+                <div className="flex items-end gap-2 h-36">
+                  {monthlySpending.map(m => {
+                    const maxTotal = Math.max(...monthlySpending.map(ms => ms.total), 1)
+                    const height = m.total > 0 ? Math.max((m.total / maxTotal) * 100, 6) : 6
+                    return (
+                      <div key={m.month} className="flex-1 flex flex-col items-center gap-1">
+                        <span className="text-[11px] text-gray-500">{m.total > 0 ? formatAmount(m.total) : ''}</span>
+                        <div className="relative w-full flex-1 rounded-2xl bg-slate-100 p-1">
+                          <div
+                            className="absolute inset-x-1 bottom-1 rounded-xl bg-gradient-to-t from-brand-700 to-brand-400 transition-all"
+                            style={{ height: `${height}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-gray-400">{m.label.split(' ')[0]}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-4">
+            {topVendors.length > 0 && (
+              <div className="card p-5">
+                <h2 className="text-sm font-semibold text-gray-700 mb-1 uppercase tracking-wide">Top Vendors</h2>
+                <p className="mb-4 text-sm text-gray-500">The payees taking the biggest share of your bill spend.</p>
+                <div className="space-y-3">
+                  {topVendors.map(v => (
+                    <div key={v.payee_name} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-gray-900">{v.payee_name}</p>
+                          <p className="text-xs text-gray-400">{v.count} bills</p>
+                        </div>
+                        <span className="text-sm font-semibold text-gray-700">{formatAmount(v.total, v.currency)}</span>
+                      </div>
+                      <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
+                        <div className="h-full rounded-full bg-brand-500" style={{ width: `${v.percentage}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <QueueCard
+              title="Outstanding Queue"
+              empty="No unpaid bills right now."
+              items={overdue.length > 0 ? overdue : dueThisWeek.length > 0 ? dueThisWeek : unpaid.filter(b => differenceInDays(new Date(b.due_date), new Date()) > 7).slice(0, 5)}
+              accent={overdue.length > 0 ? 'red' : dueThisWeek.length > 0 ? 'amber' : 'blue'}
+            />
+          </div>
+        </div>
+
+        {needsReview.length > 0 && (
+          <div>
+            <SectionHeader label="Needs Review" color="amber" />
+            <div className="space-y-2">
+              {needsReview.map(bill => <BillRow key={bill.id} bill={bill} highlight />)}
+            </div>
+          </div>
+        )}
+
+        {paid.length > 0 && (
+          <div>
+            <SectionHeader label="Recently Paid" color="green" />
+            <div className="space-y-2">
+              {paid.slice(0, 5).map(bill => <BillRow key={bill.id} bill={bill} />)}
+              {paid.length > 5 && (
+                <Link href="/bills?status=paid" className="block text-sm text-brand-600 hover:underline pl-1 pt-1">
+                  View all {paid.length} paid bills
+                </Link>
+              )}
+            </div>
+          </div>
+        )}
+
+        {allBills.length === 0 && (
+          <div className="card p-12 text-center">
+            <div className="text-5xl mb-4">📬</div>
+            <h3 className="text-lg font-semibold mb-2">No bills yet</h3>
+            <p className="text-gray-500 mb-4 text-sm">Forward a Doccle notification to your inbox address, or add a bill manually.</p>
+            <Link href="/bills/new" className="btn-primary">Add your first bill</Link>
           </div>
         )}
       </div>
-
-      {/* Spending trend */}
-      {trend && (
-        <div className="card p-5 mb-8">
-          <h2 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Monthly Spending</h2>
-          <div className="flex items-end gap-2 h-32 mb-4">
-            {monthlySpending.map(m => {
-              const maxTotal = Math.max(...monthlySpending.map(ms => ms.total), 1)
-              const height = m.total > 0 ? Math.max((m.total / maxTotal) * 100, 4) : 4
-              return (
-                <div key={m.month} className="flex-1 flex flex-col items-center gap-1">
-                  <span className="text-xs text-gray-500">{m.total > 0 ? formatAmount(m.total) : ''}</span>
-                  <div
-                    className="w-full rounded-t bg-brand-400 transition-all"
-                    style={{ height: `${height}%`, minHeight: '2px' }}
-                  />
-                  <span className="text-xs text-gray-400">{m.label.split(' ')[0]}</span>
-                </div>
-              )
-            })}
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            {trend.direction === 'up' && <span className="text-red-600 font-medium">+{trend.percentageChange}% vs last month</span>}
-            {trend.direction === 'down' && <span className="text-green-600 font-medium">-{trend.percentageChange}% vs last month</span>}
-            {trend.direction === 'stable' && <span className="text-gray-500">Stable vs last month</span>}
-          </div>
-        </div>
-      )}
-
-      {/* Top vendors */}
-      {topVendors.length > 0 && (
-        <div className="card p-5 mb-8">
-          <h2 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Top Vendors</h2>
-          <div className="space-y-3">
-            {topVendors.map(v => (
-              <div key={v.payee_name} className="flex items-center justify-between">
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className="text-sm font-medium text-gray-900 truncate">{v.payee_name}</span>
-                  <span className="text-xs text-gray-400">{v.count} bills</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-brand-400 rounded-full" style={{ width: `${v.percentage}%` }} />
-                  </div>
-                  <span className="text-sm font-medium text-gray-700 w-24 text-right">{formatAmount(v.total, v.currency)}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Overdue */}
-      {overdue.length > 0 && (
-        <div className="mb-6">
-          <SectionHeader label="Overdue" color="red" />
-          <div className="space-y-2">
-            {overdue.map(bill => <BillRow key={bill.id} bill={bill} />)}
-          </div>
-        </div>
-      )}
-
-      {/* Due this week */}
-      {dueThisWeek.length > 0 && (
-        <div className="mb-6">
-          <SectionHeader label="Due This Week" color="amber" />
-          <div className="space-y-2">
-            {dueThisWeek.map(bill => <BillRow key={bill.id} bill={bill} />)}
-          </div>
-        </div>
-      )}
-
-      {/* Needs review */}
-      {needsReview.length > 0 && (
-        <div className="mb-6">
-          <SectionHeader label="Needs Review" color="amber" />
-          <div className="space-y-2">
-            {needsReview.map(bill => <BillRow key={bill.id} bill={bill} highlight />)}
-          </div>
-        </div>
-      )}
-
-      {/* Upcoming */}
-      {unpaid.filter(b => differenceInDays(new Date(b.due_date), new Date()) > 7).length > 0 && (
-        <div className="mb-6">
-          <SectionHeader label="Upcoming" color="blue" />
-          <div className="space-y-2">
-            {unpaid.filter(b => differenceInDays(new Date(b.due_date), new Date()) > 7).map(bill => <BillRow key={bill.id} bill={bill} />)}
-          </div>
-        </div>
-      )}
-
-      {/* Recently Paid */}
-      {paid.length > 0 && (
-        <div className="mb-6">
-          <SectionHeader label="Recently Paid" color="green" />
-          <div className="space-y-2">
-            {paid.slice(0, 5).map(bill => <BillRow key={bill.id} bill={bill} />)}
-            {paid.length > 5 && (
-              <Link href="/bills?status=paid" className="block text-sm text-brand-600 hover:underline pl-1 pt-1">
-                View all {paid.length} paid bills
-              </Link>
-            )}
-          </div>
-        </div>
-      )}
-
-      {allBills.length === 0 && (
-        <div className="card p-12 text-center">
-          <div className="text-5xl mb-4">📬</div>
-          <h3 className="text-lg font-semibold mb-2">No bills yet</h3>
-          <p className="text-gray-500 mb-4 text-sm">Forward a Doccle notification to your inbox address, or add a bill manually.</p>
-          <Link href="/bills/new" className="btn-primary">Add your first bill</Link>
-        </div>
-      )}
     </div>
   )
 }
@@ -233,16 +262,45 @@ function SectionHeader({ label, color }: { label: string; color: string }) {
 
 function StatCard({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
   const colors: Record<string, string> = {
-    blue: 'border-l-brand-500', red: 'border-l-red-500',
-    green: 'border-l-green-500', amber: 'border-l-amber-500',
+    blue: 'border-brand-200 bg-gradient-to-br from-brand-50 to-white',
+    red: 'border-red-200 bg-gradient-to-br from-red-50 to-white',
+    green: 'border-green-200 bg-gradient-to-br from-green-50 to-white',
+    amber: 'border-amber-200 bg-gradient-to-br from-amber-50 to-white',
   }
   return (
-    <div className={`card p-5 border-l-4 ${colors[color] || colors.blue}`}>
-      <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">{label}</p>
-      <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
-      <p className="text-xs text-gray-500 mt-1">{sub}</p>
+    <div className={`rounded-2xl border p-4 shadow-sm ${colors[color] || colors.blue}`}>
+      <p className="text-[11px] text-gray-500 font-medium uppercase tracking-[0.18em]">{label}</p>
+      <p className="text-2xl font-bold text-gray-900 mt-2 tracking-tight">{value}</p>
+      <p className="text-xs text-gray-500 mt-2 min-h-[2rem]">{sub}</p>
     </div>
   )
+}
+
+function FocusCard({ eyebrow, title, detail, tone }: { eyebrow: string; title: string; detail: string; tone: 'red' | 'amber' | 'green' | 'blue' }) {
+  const tones = {
+    red: 'border-red-200 bg-red-50 text-red-900',
+    amber: 'border-amber-200 bg-amber-50 text-amber-900',
+    green: 'border-green-200 bg-green-50 text-green-900',
+    blue: 'border-blue-200 bg-blue-50 text-blue-900',
+  }
+
+  return (
+    <div className={`rounded-2xl border p-4 ${tones[tone]}`}>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] opacity-70">{eyebrow}</p>
+      <p className="mt-2 text-lg font-semibold tracking-tight">{title}</p>
+      <p className="mt-2 text-sm opacity-80">{detail}</p>
+    </div>
+  )
+}
+
+function TrendBadge({ trend }: { trend: NonNullable<ReturnType<typeof getSpendingTrend>> }) {
+  if (trend.direction === 'up') {
+    return <span className="rounded-full bg-red-50 px-3 py-1 text-sm font-medium text-red-600">+{trend.percentageChange}% vs last month</span>
+  }
+  if (trend.direction === 'down') {
+    return <span className="rounded-full bg-green-50 px-3 py-1 text-sm font-medium text-green-600">-{trend.percentageChange}% vs last month</span>
+  }
+  return <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600">Stable vs last month</span>
 }
 
 function SalaryCountdown({ salaryDay, totalDue }: { salaryDay: number; totalDue: number }) {
@@ -324,13 +382,13 @@ function SalarySplit({ salaryDay, bills }: { salaryDay: number; bills: Bill[] })
 function BillRow({ bill, highlight }: { bill: Bill; highlight?: boolean }) {
   const isPaid = ['payment_sent', 'confirmed'].includes(bill.status)
   return (
-    <Link href={`/bills/${bill.id}`} className={`card p-4 flex items-center justify-between hover:shadow-md transition-shadow ${highlight ? 'border-amber-300' : ''}`}>
-      <div className="flex items-center gap-3">
-        <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-lg ${isPaid ? 'bg-green-50' : 'bg-brand-50'}`}>
+    <Link href={`/bills/${bill.id}`} className={`card p-4 flex items-center justify-between gap-3 hover:shadow-md transition-shadow ${highlight ? 'border-amber-300 bg-amber-50/40' : ''}`}>
+      <div className="flex min-w-0 items-center gap-3">
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg ${isPaid ? 'bg-green-50' : 'bg-brand-50'}`}>
           {bill.source === 'doccle' ? '🟦' : bill.source === 'email' ? '📧' : bill.source === 'upload' ? '📎' : '✏️'}
         </div>
-        <div>
-          <p className="font-medium text-gray-900 text-sm">{bill.payee_name}</p>
+        <div className="min-w-0">
+          <p className="truncate font-medium text-gray-900 text-sm">{bill.payee_name}</p>
           <p className="text-xs text-gray-500">
             {isPaid && bill.paid_at
               ? `Paid ${format(new Date(bill.paid_at), 'd MMM yyyy')}`
@@ -338,9 +396,9 @@ function BillRow({ bill, highlight }: { bill: Bill; highlight?: boolean }) {
           </p>
         </div>
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex shrink-0 items-center gap-2 md:gap-3">
         {bill.structured_comm && (
-          <span className={`text-xs px-2 py-0.5 rounded-full font-mono ${bill.structured_comm_valid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+          <span className={`hidden md:inline-flex text-xs px-2 py-0.5 rounded-full font-mono ${bill.structured_comm_valid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
             {bill.structured_comm_valid ? '✓ ref' : '⚠ ref'}
           </span>
         )}
@@ -351,5 +409,26 @@ function BillRow({ bill, highlight }: { bill: Bill; highlight?: boolean }) {
         <span className="text-gray-400">›</span>
       </div>
     </Link>
+  )
+}
+
+function QueueCard({ title, empty, items, accent }: { title: string; empty: string; items: Bill[]; accent: 'red' | 'amber' | 'blue' }) {
+  const accentClasses = {
+    red: 'text-red-700',
+    amber: 'text-amber-700',
+    blue: 'text-brand-700',
+  }
+
+  return (
+    <div className="card p-5">
+      <h2 className={`text-sm font-semibold uppercase tracking-wide ${accentClasses[accent]}`}>{title}</h2>
+      {items.length === 0 ? (
+        <p className="mt-3 text-sm text-gray-400">{empty}</p>
+      ) : (
+        <div className="mt-4 space-y-2">
+          {items.slice(0, 5).map(bill => <BillRow key={bill.id} bill={bill} />)}
+        </div>
+      )}
+    </div>
   )
 }

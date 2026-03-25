@@ -10,6 +10,25 @@ import {
 import { format } from "date-fns";
 import type { Bill } from "@/types";
 
+function getIngestionMethodLabel(method: Bill["ingestion_method"]): string | null {
+  switch (method) {
+    case "doccle_html_pdf":
+      return "Doccle page + PDF"
+    case "email_attachment":
+      return "Forwarded email attachment"
+    case "email_body_text":
+      return "Forwarded email body"
+    case "upload_pdf":
+      return "Uploaded PDF"
+    case "upload_image":
+      return "Uploaded image"
+    case "manual_entry":
+      return "Manual entry"
+    default:
+      return null
+  }
+}
+
 interface BillEditableDetailsProps {
   bill: Bill;
   defaultEditing?: boolean;
@@ -109,6 +128,20 @@ export function BillEditableDetails({
             value={format(new Date(bill.due_date), "d MMMM yyyy")}
           />
           <DetailRow label="Source" value={bill.source} />
+          {bill.extraction_confidence !== null && (
+            <DetailRow
+              label="Extraction Confidence"
+              value={`${Math.round((bill.extraction_confidence ?? 0) * 100)}%`}
+            />
+          )}
+          {getIngestionMethodLabel(bill.ingestion_method) && (
+            <DetailRow
+              label="Ingestion"
+              value={getIngestionMethodLabel(bill.ingestion_method)!}
+            />
+          )}
+          {bill.payee_id && <DetailRow label="Vendor Match" value="Matched to vendor directory" />}
+          {bill.needs_review && <DetailRow label="Review Status" value="Needs your confirmation" />}
           {bill.iban && <DetailRow label="IBAN" value={bill.iban} />}
           {bill.bic && <DetailRow label="BIC" value={bill.bic} />}
           {bill.structured_comm && (

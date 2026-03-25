@@ -35,12 +35,22 @@ export function ManualForm({ onBack }: ManualFormProps) {
         source: 'manual',
       }),
     })
-    router.push('/dashboard')
+    router.refresh()
+    router.replace('/dashboard')
   }
 
   return (
     <form onSubmit={save} className="space-y-4">
       <button type="button" onClick={onBack} className="text-sm text-brand-600 hover:underline">&larr; Back</button>
+      <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+        <div className="mb-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Manual Entry</p>
+          <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-900">Add the transfer details yourself.</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-500">
+            Use this when you already know the payment details or want to enter a bill without uploading a file.
+          </p>
+        </div>
+      </div>
       <BillFormFields form={form} setForm={setForm} required />
       <div className="flex gap-3">
         <button type="submit" disabled={saving} className="btn-primary">

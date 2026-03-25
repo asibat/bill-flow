@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createServerSupabaseClient, createServiceClient } from '@/lib/supabase/server'
 import { createPaymentFollowupReminder, dismissBillReminders, syncBillDueReminders } from '@/lib/reminders/create'
 import { DUE_REMINDER_KINDS } from '@/lib/reminders/kinds'
 import { z } from 'zod'
@@ -16,6 +16,7 @@ const UpdateBillSchema = z.object({
   iban: z.string().optional().nullable(),
   bic: z.string().optional().nullable(),
   needs_review: z.boolean().optional(),
+  remove_document: z.boolean().optional(),
 })
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
@@ -51,7 +52,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
   const { data: existingBill, error: existingError } = await supabase
     .from('bills')
-    .select('id, due_date, status, paid_at')
+    .select('id, due_date, status, paid_at, raw_pdf_path')
     .eq('id', params.id)
     .eq('user_id', user.id)
     .single()
@@ -59,6 +60,27 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   if (existingError || !existingBill) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
+
+  if (parsed.data.remove_document && existingBill.raw_pdf_path) {
+    const serviceClient = createServiceClient()
+    const { error: storageError } = await serviceClient.storage
+      .from('bill-documents')
+      .remove([existingBill.raw_pdf_path])
+
+    if (storageError) {
+      console.error('[bills] failed to remove document', {
+        billId: params.id,
+        userId: user.id,
+        path: existingBill.raw_pdf_path,
+        message: storageError.message,
+      })
+      return NextResponse.json({ error: 'Failed to remove stored document' }, { status: 500 })
+    }
+
+    updates.raw_pdf_path = null
+  }
+
+  delete updates.remove_document
 
   const { data, error } = await supabase
     .from('bills')
@@ -104,6 +126,30 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { data: existingBill } = await supabase
+    .from('bills')
+    .select('raw_pdf_path')
+    .eq('id', params.id)
+    .eq('user_id', user.id)
+    .single()
+
+  if (existingBill?.raw_pdf_path) {
+    const serviceClient = createServiceClient()
+    const { error: storageError } = await serviceClient.storage
+      .from('bill-documents')
+      .remove([existingBill.raw_pdf_path])
+
+    if (storageError) {
+      console.error('[bills] failed to remove document during bill delete', {
+        billId: params.id,
+        userId: user.id,
+        path: existingBill.raw_pdf_path,
+        message: storageError.message,
+      })
+      return NextResponse.json({ error: 'Failed to delete bill document' }, { status: 500 })
+    }
+  }
 
   const { error } = await supabase
     .from('bills')

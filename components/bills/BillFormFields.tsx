@@ -30,8 +30,8 @@ export function BillFormFields({
     : null;
 
   return (
-    <div className="card p-5 space-y-4">
-      <div className="grid grid-cols-2 gap-4">
+    <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm space-y-5 md:p-6">
+      <div className="grid gap-4 md:grid-cols-2">
         <div>
           <label className="label">Payee Name {required && "*"}</label>
           <input
@@ -82,8 +82,11 @@ export function BillFormFields({
           onChange={set("structured_comm")}
           placeholder="+++XXX/XXXX/XXXXX+++"
         />
+        <p className="mt-2 text-xs text-slate-400">
+          This reference is often required for Belgian transfers. Keep it exactly as shown on the bill.
+        </p>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid gap-4 md:grid-cols-2">
         <div>
           <label className="label">IBAN</label>
           <input

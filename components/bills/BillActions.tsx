@@ -36,7 +36,8 @@ export default function BillActions({ bill }: { bill: Bill }) {
     if (!confirm('Delete this bill?')) return
     setLoading(true)
     await fetch(`/api/bills/${bill.id}`, { method: 'DELETE' })
-    router.push('/dashboard')
+    router.refresh()
+    router.replace('/dashboard')
   }
 
   const isPaid = ['payment_sent', 'confirmed'].includes(bill.status)
@@ -48,13 +49,17 @@ export default function BillActions({ bill }: { bill: Bill }) {
       {!isPaid && (
         <>
           {!showPaidForm ? (
-            <div className="flex flex-wrap gap-3">
+            <div className="space-y-3">
+              <p className="text-sm text-gray-600">
+                Once you send the transfer from your bank, mark it as paid so BillFlow can stop due reminders and schedule a follow-up confirmation.
+              </p>
+              <div className="flex flex-wrap gap-3">
               <button
                 onClick={() => setShowPaidForm(true)}
                 className="btn-primary"
                 disabled={loading}
               >
-                Mark as Paid
+                I Sent the Transfer
               </button>
               {bill.status === 'received' && (
                 <button
@@ -68,6 +73,7 @@ export default function BillActions({ bill }: { bill: Bill }) {
               <button onClick={deleteBill} className="btn-danger" disabled={loading}>
                 Delete
               </button>
+              </div>
             </div>
           ) : (
             <div className="space-y-4">
@@ -104,7 +110,7 @@ export default function BillActions({ bill }: { bill: Bill }) {
               </div>
               <div className="flex gap-3">
                 <button onClick={markSent} className="btn-primary" disabled={loading}>
-                  {loading ? 'Saving...' : 'Confirm Payment'}
+                  {loading ? 'Saving...' : 'Save Payment Sent'}
                 </button>
                 <button onClick={() => setShowPaidForm(false)} className="btn-secondary">
                   Cancel
@@ -117,6 +123,9 @@ export default function BillActions({ bill }: { bill: Bill }) {
 
       {bill.status === 'payment_sent' && (
         <div className="space-y-4">
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+            Transfer recorded. Leave this as-is until the payment settles, then confirm it here.
+          </div>
           <div className="flex items-center gap-2 text-sm text-gray-600">
             {bill.paid_at && <span>Paid on {format(new Date(bill.paid_at), 'd MMM yyyy')}</span>}
             {bill.wire_reference && <span className="text-gray-400">·</span>}
@@ -151,7 +160,7 @@ export default function BillActions({ bill }: { bill: Bill }) {
               className="btn-primary"
               disabled={loading}
             >
-              Confirm Payment Received
+              Mark as Confirmed
             </button>
             <button onClick={deleteBill} className="btn-danger" disabled={loading}>
               Delete

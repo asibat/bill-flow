@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { addDays, format as formatDate } from 'date-fns'
 import { createServiceClient } from '@/lib/supabase/server'
-import { extractFromText, linkExtractionLogToBill } from '@/lib/extraction'
+import { extractFromDocument, extractFromImage, extractFromText, linkExtractionLogToBill } from '@/lib/extraction'
 import { findDuplicates } from '@/lib/dedup'
 import { createBillReminder } from '@/lib/reminders/create'
-import { fetchReceivedEmail, type ReceivedEmail, type ResendWebhookEvent, verifyResendWebhookSignature } from '@/lib/resend/receiving'
+import { fetchReceivedEmail, listReceivedEmailAttachments, type ReceivedAttachment, type ReceivedEmail, type ResendWebhookEvent, verifyResendWebhookSignature } from '@/lib/resend/receiving'
 import { extractDoccleUrl, formatStructuredComm, parseDoccleHtml, validateStructuredComm } from '@/lib/utils'
 import { matchOrCreateVendor } from '@/lib/vendors/match'
 
@@ -14,6 +14,11 @@ type LocalSimulationPayload = {
   subject?: string
   text?: string
   html?: string
+  attachments?: Array<{
+    filename: string
+    content_type: string
+    base64: string
+  }>
 }
 
 function isLocalSimulationPayload(value: unknown): value is LocalSimulationPayload {
@@ -30,12 +35,82 @@ function normalizeEmailAddress(value: string | string[] | undefined | null): str
   return Array.isArray(value) ? (value[0] ?? '') : value
 }
 
+function isSupportedAttachmentType(contentType: string): boolean {
+  return contentType === 'application/pdf' ||
+    contentType === 'image/png' ||
+    contentType === 'image/jpeg' ||
+    contentType === 'image/webp'
+}
+
+function pickBestAttachment(attachments: ReceivedAttachment[]): ReceivedAttachment | null {
+  const supported = attachments.filter(attachment => isSupportedAttachmentType(attachment.content_type))
+  if (supported.length === 0) return null
+
+  supported.sort((a, b) => {
+    const aScore = (a.content_type === 'application/pdf' ? 100 : 0) + a.size
+    const bScore = (b.content_type === 'application/pdf' ? 100 : 0) + b.size
+    return bScore - aScore
+  })
+
+  return supported[0]
+}
+
+function extensionForMimeType(mimeType: string): string {
+  if (mimeType === 'application/pdf') return 'pdf'
+  if (mimeType === 'image/png') return 'png'
+  if (mimeType === 'image/webp') return 'webp'
+  return 'jpg'
+}
+
+async function fetchAttachmentBuffer(attachment: ReceivedAttachment): Promise<Buffer> {
+  const response = await fetch(attachment.download_url, {
+    headers: { 'User-Agent': 'BillFlow/1.0' },
+    signal: AbortSignal.timeout(20000),
+  })
+
+  if (!response.ok) {
+    const body = await response.text()
+    throw new Error(`Attachment download failed (${response.status}): ${body}`)
+  }
+
+  return Buffer.from(await response.arrayBuffer())
+}
+
+async function processEmailAttachment(
+  userId: string,
+  attachment: ReceivedAttachment,
+  buffer: Buffer,
+  explanationLanguage: string,
+  supabase: ReturnType<typeof createServiceClient>
+) {
+  const storagePath = `${userId}/${Date.now()}-email-attachment.${extensionForMimeType(attachment.content_type)}`
+  const { error: storageError } = await supabase.storage
+    .from('bill-documents')
+    .upload(storagePath, buffer, { contentType: attachment.content_type })
+
+  if (storageError) {
+    throw new Error(`Attachment storage failed: ${storageError.message}`)
+  }
+
+  const base64 = buffer.toString('base64')
+  const extractionResponse = attachment.content_type === 'application/pdf'
+    ? await extractFromDocument(base64, attachment.content_type, userId, { explanationLanguage })
+    : await extractFromImage(base64, attachment.content_type, userId, { explanationLanguage })
+
+  return {
+    extraction: extractionResponse.result,
+    extractionLogId: extractionResponse.logId,
+    storagePath,
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const rawBody = await request.text()
     const payload = rawBody ? JSON.parse(rawBody) : {}
 
     let receivedEmail: ReceivedEmail | null = null
+    let simulatedAttachments: ReceivedAttachment[] = []
 
     if (isLocalSimulationPayload(payload)) {
       if (!shouldSkipVerification()) {
@@ -57,6 +132,16 @@ export async function POST(request: NextRequest) {
         attachments: [],
         raw: null,
       }
+      simulatedAttachments = (payload.attachments ?? []).map((attachment, index) => ({
+        id: `local-attachment-${index + 1}`,
+        filename: attachment.filename,
+        size: attachment.base64.length,
+        content_type: attachment.content_type,
+        content_disposition: 'attachment',
+        content_id: null,
+        download_url: `data:${attachment.content_type};base64,${attachment.base64}`,
+        expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      }))
     } else {
       const webhookSecret = process.env.RESEND_WEBHOOK_SECRET
       if (!shouldSkipVerification()) {
@@ -109,7 +194,24 @@ export async function POST(request: NextRequest) {
       return await handleDoccleEmail(userId, doccleUrl, fullText, explanationLanguage, supabase)
     }
 
-    return await handleGenericEmail(userId, fullText, subject, fromAddress, explanationLanguage, supabase)
+    let attachments: ReceivedAttachment[] = simulatedAttachments
+    if (!attachments.length && receivedEmail?.id && receivedEmail.attachments.length > 0) {
+      try {
+        attachments = await listReceivedEmailAttachments(receivedEmail.id)
+        console.log('[ingest:email] listed attachments', {
+          emailId: receivedEmail.id,
+          total: attachments.length,
+          supported: attachments.filter(attachment => isSupportedAttachmentType(attachment.content_type)).length,
+        })
+      } catch (error) {
+        console.error('[ingest:email] failed to list attachments', {
+          emailId: receivedEmail.id,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+
+    return await handleGenericEmail(userId, fullText, subject, fromAddress, explanationLanguage, attachments, supabase)
   } catch (err) {
     console.error('Ingest email error:', err)
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Internal error' }, { status: 500 })
@@ -210,6 +312,7 @@ Doccle page content: ${doccleHtml.slice(0, 4000)}
   const { data: bill, error } = await supabase.from('bills').insert({
     user_id: userId,
     source: 'doccle',
+    ingestion_method: 'doccle_html_pdf',
     payee_name: sourcePayeeName,
     payee_id: vendor?.payee_id || null,
     amount: extraction.amount ?? htmlMeta.amount ?? 0,
@@ -254,10 +357,70 @@ async function handleGenericEmail(
   subject: string,
   fromAddress: string,
   explanationLanguage: string,
+  attachments: ReceivedAttachment[],
   supabase: ReturnType<typeof createServiceClient>
 ) {
-  const extractionResponse = await extractFromText(fullText, userId, { explanationLanguage })
-  const extraction = extractionResponse.result
+  let extractionResponse = await extractFromText(fullText, userId, { explanationLanguage })
+  let extraction = extractionResponse.result
+  let rawDocumentPath: string | null = null
+  let extractionSource: 'text' | 'attachment' = 'text'
+
+  const selectedAttachment = pickBestAttachment(attachments)
+  if (selectedAttachment) {
+    try {
+      console.log('[ingest:email] attempting attachment extraction', {
+        userId,
+        attachmentId: selectedAttachment.id,
+        filename: selectedAttachment.filename,
+        contentType: selectedAttachment.content_type,
+        size: selectedAttachment.size,
+      })
+
+      const buffer = selectedAttachment.download_url.startsWith('data:')
+        ? Buffer.from(selectedAttachment.download_url.split(',')[1] ?? '', 'base64')
+        : await fetchAttachmentBuffer(selectedAttachment)
+
+      const attachmentResult = await processEmailAttachment(
+        userId,
+        selectedAttachment,
+        buffer,
+        explanationLanguage,
+        supabase
+      )
+
+      extraction = attachmentResult.extraction
+      extractionResponse = {
+        result: attachmentResult.extraction,
+        logId: attachmentResult.extractionLogId,
+      }
+      rawDocumentPath = attachmentResult.storagePath
+      extractionSource = 'attachment'
+
+      console.log('[ingest:email] attachment extraction succeeded', {
+        userId,
+        attachmentId: selectedAttachment.id,
+        filename: selectedAttachment.filename,
+        storagePath: rawDocumentPath,
+        confidence: extraction.confidence,
+      })
+    } catch (error) {
+      console.error('[ingest:email] attachment extraction failed, falling back to text', {
+        userId,
+        attachmentId: selectedAttachment.id,
+        filename: selectedAttachment.filename,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  } else if (attachments.length > 0) {
+    console.warn('[ingest:email] attachments present but none supported', {
+      userId,
+      attachments: attachments.map(attachment => ({
+        id: attachment.id,
+        filename: attachment.filename,
+        contentType: attachment.content_type,
+      })),
+    })
+  }
 
   let structuredCommValid: boolean | null = null
   if (extraction.structured_comm) {
@@ -284,6 +447,7 @@ async function handleGenericEmail(
   const { data: bill, error } = await supabase.from('bills').insert({
     user_id: userId,
     source: 'email',
+    ingestion_method: extractionSource === 'attachment' ? 'email_attachment' : 'email_body_text',
     payee_name: sourcePayeeName,
     payee_id: vendor?.payee_id || null,
     amount: extraction.amount ?? 0,
@@ -297,10 +461,18 @@ async function handleGenericEmail(
     extraction_confidence: extraction.confidence,
     language_detected: extraction.language_detected,
     explanation: extraction.explanation,
+    raw_pdf_path: rawDocumentPath,
     needs_review: !extraction.due_date || !extraction.amount || extraction.confidence < 0.7,
   }).select().single()
 
-  if (error) return NextResponse.json({ error: 'DB insert failed' }, { status: 500 })
+  if (error) {
+    console.error('[ingest:email] failed to insert generic email bill', {
+      userId,
+      extractionSource,
+      error: error.message,
+    })
+    return NextResponse.json({ error: 'DB insert failed' }, { status: 500 })
+  }
 
   if (extractionResponse.logId && bill?.id) {
     await linkExtractionLogToBill(extractionResponse.logId, bill.id)
@@ -314,5 +486,9 @@ async function handleGenericEmail(
     })
   }
 
-  return NextResponse.json({ success: true, bill_id: bill?.id, source: 'email' })
+  return NextResponse.json({
+    success: true,
+    bill_id: bill?.id,
+    source: extractionSource === 'attachment' ? 'email_attachment' : 'email',
+  })
 }

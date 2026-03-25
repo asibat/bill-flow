@@ -51,6 +51,17 @@ export interface ReceivedEmail {
   } | null
 }
 
+export interface ReceivedAttachment {
+  id: string
+  filename: string
+  size: number
+  content_type: string
+  content_disposition: string | null
+  content_id: string | null
+  download_url: string
+  expires_at: string
+}
+
 function decodeWebhookSecret(secret: string): Buffer {
   const normalized = secret.startsWith('whsec_') ? secret.slice(6) : secret
   return Buffer.from(normalized, 'base64')
@@ -133,4 +144,27 @@ export async function fetchReceivedEmail(emailId: string): Promise<ReceivedEmail
   }
 
   return response.json() as Promise<ReceivedEmail>
+}
+
+export async function listReceivedEmailAttachments(emailId: string): Promise<ReceivedAttachment[]> {
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) {
+    throw new Error('RESEND_API_KEY is required to list received email attachments')
+  }
+
+  const response = await fetch(`${RESEND_API_BASE}/emails/receiving/${emailId}/attachments`, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'User-Agent': 'BillFlow/1.0',
+    },
+    signal: AbortSignal.timeout(15000),
+  })
+
+  if (!response.ok) {
+    const body = await response.text()
+    throw new Error(`Failed to list received email attachments (${response.status}): ${body}`)
+  }
+
+  const json = await response.json() as { data?: ReceivedAttachment[] }
+  return json.data ?? []
 }

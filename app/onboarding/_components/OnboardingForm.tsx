@@ -64,7 +64,6 @@ export function OnboardingForm({ displayName: initialName, preferredLanguage: in
         <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{error}</div>
       )}
 
-      {/* Display name */}
       <div>
         <label className="block text-sm font-semibold text-gray-900 mb-2">Display name</label>
         <input
@@ -77,30 +76,31 @@ export function OnboardingForm({ displayName: initialName, preferredLanguage: in
         <p className="text-xs text-gray-400 mt-1">Optional — used in the app interface</p>
       </div>
 
-      {/* Language */}
       <div>
         <label className="block text-sm font-semibold text-gray-900 mb-2">Primary bill language</label>
         <p className="text-sm text-gray-500 mb-3">
           Most of your bills are in which language? This helps with text extraction accuracy.
         </p>
-        <div className="flex gap-3">
+        <div className="grid gap-3 sm:grid-cols-3">
           {LANGUAGES.map(l => (
             <button
               key={l.value}
               onClick={() => setLanguage(l.value)}
-              className={`px-5 py-2.5 rounded-lg border text-sm font-medium transition-all ${
+              className={`rounded-2xl border px-4 py-4 text-left text-sm font-medium transition-all ${
                 language === l.value
                   ? 'border-brand-500 bg-brand-50 text-brand-700'
-                  : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                  : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-slate-50'
               }`}
             >
-              {l.label}
+              <span className="block">{l.label}</span>
+              <span className="mt-1 block text-xs font-normal opacity-70">
+                {l.value === 'en' ? 'Best if your bills are mostly translated or mixed-language' : l.value === 'fr' ? 'Best for French-speaking Belgian billers' : 'Best for Dutch-speaking Belgian billers'}
+              </span>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Actions */}
       <div className="flex items-center gap-4 pt-2">
         <button onClick={save} disabled={saving} className="btn-primary">
           {saving ? 'Saving...' : 'Save & Continue'}
