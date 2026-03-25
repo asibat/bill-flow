@@ -1,7 +1,5 @@
 import { Resend } from 'resend'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
-
 const FROM_ADDRESS = process.env.EMAIL_FROM_ADDRESS ?? 'BillFlow <noreply@billflow.app>'
 
 interface SendEmailOptions {
@@ -20,8 +18,20 @@ function getAbsoluteAppUrl(path = '/dashboard') {
   return `${base.replace(/\/$/, '')}${path.startsWith('/') ? path : `/${path}`}`
 }
 
+function getResendClient() {
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) return null
+  return new Resend(apiKey)
+}
+
 export async function sendEmail({ to, subject, html }: SendEmailOptions): Promise<{ id: string } | null> {
   try {
+    const resend = getResendClient()
+    if (!resend) {
+      console.error('[email] RESEND_API_KEY is not configured')
+      return null
+    }
+
     const { data, error } = await resend.emails.send({
       from: FROM_ADDRESS,
       to,
