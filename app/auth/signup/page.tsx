@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { getAuthCallbackUrl } from '@/lib/supabase/auth-redirect'
 import Link from 'next/link'
 
 export default function SignupPage() {
@@ -9,18 +9,53 @@ export default function SignupPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [confirmationEmail, setConfirmationEmail] = useState<string | null>(null)
   const supabase = createClient()
-  const router = useRouter()
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError('')
-    const { error } = await supabase.auth.signUp({
-      email, password,
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: getAuthCallbackUrl(),
+      },
     })
-    if (error) { setError(error.message); setLoading(false) }
-    else router.push('/dashboard')
+
+    if (error) {
+      setError(error.message)
+      setLoading(false)
+      return
+    }
+
+    if (data.user && !data.session) {
+      setConfirmationEmail(email)
+      setLoading(false)
+      return
+    }
+
+    window.location.href = '/dashboard'
+  }
+
+  if (confirmationEmail) {
+    return (
+      <div className="card p-8">
+        <h2 className="text-xl font-semibold text-gray-900 mb-3">Check your email</h2>
+        <p className="text-sm leading-6 text-gray-600">
+          We sent a confirmation link to <span className="font-medium text-gray-900">{confirmationEmail}</span>.
+          Open that link on this device to finish your signup and return to BillFlow.
+        </p>
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+          If the link still opens on localhost, update your Supabase Auth site URL and redirect URLs to your deployed BillFlow URL.
+        </div>
+        <p className="text-center text-sm text-gray-500 mt-6">
+          Already confirmed? <Link href="/auth/login" className="text-brand-600 hover:underline">Sign in</Link>
+        </p>
+      </div>
+    )
   }
 
   return (

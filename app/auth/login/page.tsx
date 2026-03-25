@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { getAuthCallbackUrl } from '@/lib/supabase/auth-redirect'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
@@ -22,10 +23,18 @@ export default function LoginPage() {
   }
 
   async function handleGoogle() {
-    await supabase.auth.signInWithOAuth({
+    setLoading(true)
+    setError('')
+
+    const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: { redirectTo: getAuthCallbackUrl() },
     })
+
+    if (error) {
+      setError(error.message)
+      setLoading(false)
+    }
   }
 
   return (
@@ -49,8 +58,8 @@ export default function LoginPage() {
         <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200" /></div>
         <div className="relative flex justify-center"><span className="bg-white px-2 text-xs text-gray-500">or</span></div>
       </div>
-      <button onClick={handleGoogle} className="btn-secondary w-full justify-center">
-        Continue with Google
+      <button onClick={handleGoogle} disabled={loading} className="btn-secondary w-full justify-center">
+        {loading ? 'Opening Google…' : 'Continue with Google'}
       </button>
       <p className="text-center text-sm text-gray-500 mt-4">
         No account? <Link href="/auth/signup" className="text-brand-600 hover:underline">Sign up</Link>
