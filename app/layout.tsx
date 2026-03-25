@@ -1,7 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import PwaInit from '@/components/pwa/PwaInit'
-import { assertProductionEnv } from '@/lib/env'
 
 export const metadata: Metadata = {
   title: 'BillFlow — Belgian Bill Management',
@@ -24,8 +23,6 @@ export const viewport = {
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  assertProductionEnv()
-
   return (
     <html lang="en">
       <body>
