@@ -3,7 +3,7 @@ alter table public.user_settings
   add column push_notifications boolean not null default false;
 
 create table public.push_subscriptions (
-  id           uuid primary key default uuid_generate_v4(),
+  id           uuid primary key default gen_random_uuid(),
   user_id      uuid not null references auth.users(id) on delete cascade,
   endpoint     text not null unique,
   p256dh       text not null,

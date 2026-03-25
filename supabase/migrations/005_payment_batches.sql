@@ -1,6 +1,6 @@
 -- ── PAYMENT BATCHES ──────────────────────────────────────────
 create table public.payment_batches (
-  id           uuid primary key default uuid_generate_v4(),
+  id           uuid primary key default gen_random_uuid(),
   user_id      uuid not null references auth.users(id) on delete cascade,
   bill_ids     uuid[] not null default '{}',
   total_amount numeric(12,2) not null default 0,

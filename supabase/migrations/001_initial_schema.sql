@@ -3,12 +3,12 @@
 -- Run this in Supabase SQL Editor
 -- ============================================================
 
--- Enable UUID extension
-create extension if not exists "uuid-ossp";
+-- Enable UUID generation
+create extension if not exists pgcrypto;
 
 -- ── PAYEES (shared directory, community-validated) ──────────
 create table public.payees (
-  id          uuid primary key default uuid_generate_v4(),
+  id          uuid primary key default gen_random_uuid(),
   name        text not null,
   iban        text,
   bic         text,
@@ -36,7 +36,7 @@ insert into public.payees (name, iban, bic, category, verified) values
 
 -- ── BILLS ───────────────────────────────────────────────────
 create table public.bills (
-  id                      uuid primary key default uuid_generate_v4(),
+  id                      uuid primary key default gen_random_uuid(),
   user_id                 uuid not null references auth.users(id) on delete cascade,
   source                  text not null default 'manual'
                           check (source in ('doccle','email','upload','manual')),
@@ -79,7 +79,7 @@ create trigger bills_updated_at
 
 -- ── REMINDERS ───────────────────────────────────────────────
 create table public.reminders (
-  id           uuid primary key default uuid_generate_v4(),
+  id           uuid primary key default gen_random_uuid(),
   bill_id      uuid not null references public.bills(id) on delete cascade,
   user_id      uuid not null references auth.users(id) on delete cascade,
   remind_at    timestamptz not null,
