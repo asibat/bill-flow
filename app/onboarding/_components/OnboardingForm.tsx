@@ -38,8 +38,7 @@ export function OnboardingForm({ displayName: initialName, preferredLanguage: in
         const body = await res.json().catch(() => ({}))
         throw new Error(body.error || 'Failed to save')
       }
-      router.refresh()
-      router.push('/dashboard')
+      window.location.assign('/dashboard')
     } catch (err) {
       console.error('Onboarding save error:', err)
       setError(err instanceof Error ? err.message : 'Failed to save')
@@ -50,12 +49,25 @@ export function OnboardingForm({ displayName: initialName, preferredLanguage: in
 
   async function skip() {
     setSaving(true)
-    await fetch('/api/settings', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ onboarding_completed: true }),
-    })
-    router.push('/dashboard')
+    setError(null)
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ onboarding_completed: true }),
+      })
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || 'Failed to save')
+      }
+
+      window.location.assign('/dashboard')
+    } catch (err) {
+      console.error('Onboarding skip error:', err)
+      setError(err instanceof Error ? err.message : 'Failed to save')
+      setSaving(false)
+    }
   }
 
   return (
