@@ -7,6 +7,7 @@ import Link from 'next/link'
 export default function SignupPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [confirmationEmail, setConfirmationEmail] = useState<string | null>(null)
@@ -67,8 +68,24 @@ export default function SignupPage() {
           <input type="email" className="input" value={email} onChange={e => setEmail(e.target.value)} required />
         </div>
         <div>
-          <label className="label">Password</label>
-          <input type="password" className="input" value={password} onChange={e => setPassword(e.target.value)} required minLength={8} />
+          <div className="mb-1 flex items-center justify-between">
+            <label className="label mb-0">Password</label>
+            <button
+              type="button"
+              onClick={() => setShowPassword(prev => !prev)}
+              className="text-xs font-medium text-brand-600 hover:text-brand-700"
+            >
+              {showPassword ? 'Hide' : 'Show'}
+            </button>
+          </div>
+          <input
+            type={showPassword ? 'text' : 'password'}
+            className="input"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            required
+            minLength={8}
+          />
         </div>
         {error && <p className="text-red-600 text-sm">{error}</p>}
         <button type="submit" disabled={loading} className="btn-primary w-full justify-center">

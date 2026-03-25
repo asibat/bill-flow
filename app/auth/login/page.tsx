@@ -1,14 +1,16 @@
 'use client'
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { getAuthCallbackUrl } from '@/lib/supabase/auth-redirect'
+import { getAuthCallbackUrl, getAuthRedirectUrl } from '@/lib/supabase/auth-redirect'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
   const supabase = createClient()
@@ -17,6 +19,7 @@ export default function LoginPage() {
     e.preventDefault()
     setLoading(true)
     setError('')
+    setNotice('')
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) { setError(error.message); setLoading(false) }
     else router.push('/dashboard')
@@ -25,6 +28,7 @@ export default function LoginPage() {
   async function handleGoogle() {
     setLoading(true)
     setError('')
+    setNotice('')
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -37,6 +41,30 @@ export default function LoginPage() {
     }
   }
 
+  async function handleForgotPassword() {
+    if (!email) {
+      setError('Enter your email first so we know where to send the reset link.')
+      return
+    }
+
+    setLoading(true)
+    setError('')
+    setNotice('')
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: getAuthRedirectUrl('/auth/reset-password'),
+    })
+
+    if (error) {
+      setError(error.message)
+      setLoading(false)
+      return
+    }
+
+    setNotice(`Password reset instructions sent to ${email}.`)
+    setLoading(false)
+  }
+
   return (
     <div className="card p-8">
       <h2 className="text-xl font-semibold text-gray-900 mb-6">Sign in</h2>
@@ -46,10 +74,35 @@ export default function LoginPage() {
           <input type="email" className="input" value={email} onChange={e => setEmail(e.target.value)} required />
         </div>
         <div>
-          <label className="label">Password</label>
-          <input type="password" className="input" value={password} onChange={e => setPassword(e.target.value)} required />
+          <div className="mb-1 flex items-center justify-between">
+            <label className="label mb-0">Password</label>
+            <button
+              type="button"
+              onClick={() => setShowPassword(prev => !prev)}
+              className="text-xs font-medium text-brand-600 hover:text-brand-700"
+            >
+              {showPassword ? 'Hide' : 'Show'}
+            </button>
+          </div>
+          <input
+            type={showPassword ? 'text' : 'password'}
+            className="input"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            required
+          />
         </div>
         {error && <p className="text-red-600 text-sm">{error}</p>}
+        {notice && <p className="text-green-600 text-sm">{notice}</p>}
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={handleForgotPassword}
+            className="text-sm text-brand-600 hover:underline"
+          >
+            Forgot password?
+          </button>
+        </div>
         <button type="submit" disabled={loading} className="btn-primary w-full justify-center">
           {loading ? 'Signing in…' : 'Sign in'}
         </button>

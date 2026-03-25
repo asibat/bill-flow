@@ -33,7 +33,8 @@ export async function middleware(request: NextRequest) {
 
   // Redirect authenticated users away from auth pages
   const isAuthPage = request.nextUrl.pathname.startsWith('/auth')
-  if (isAuthPage && user) {
+  const allowsAuthenticatedAccess = request.nextUrl.pathname.startsWith('/auth/reset-password')
+  if (isAuthPage && user && !allowsAuthenticatedAccess) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
