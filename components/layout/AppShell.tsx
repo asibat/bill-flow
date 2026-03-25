@@ -34,9 +34,9 @@ export default function AppShell({ children, userEmail, inboxAddress }: AppShell
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(29,78,216,0.08),_transparent_35%),linear-gradient(to_bottom,_#f8fafc,_#f3f4f6)]">
-      <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/90 backdrop-blur md:hidden">
-        <div className="flex items-center justify-between px-4 py-3">
+    <div className="min-h-screen w-full overflow-x-hidden bg-[radial-gradient(circle_at_top_left,_rgba(29,78,216,0.08),_transparent_35%),linear-gradient(to_bottom,_#f8fafc,_#f3f4f6)]">
+      <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/90 pt-[env(safe-area-inset-top)] backdrop-blur md:hidden">
+        <div className="mx-auto flex w-full max-w-full items-center justify-between px-4 py-3">
           <div>
             <p className="text-lg font-bold tracking-tight text-slate-900">BillFlow</p>
             <p className="text-xs text-slate-500">Bills, reminders, and payments</p>
@@ -49,8 +49,11 @@ export default function AppShell({ children, userEmail, inboxAddress }: AppShell
             {mobileMenuOpen ? 'Close' : 'Menu'}
           </button>
         </div>
+        <div className="px-4 pb-3">
+          <InstallPrompt />
+        </div>
         {mobileMenuOpen && (
-          <div className="border-t border-slate-200 bg-white px-4 py-4">
+          <div className="max-h-[calc(100svh-72px-env(safe-area-inset-top))] overflow-y-auto border-t border-slate-200 bg-white px-4 py-4">
             <nav className="space-y-2">
               {primaryNav.map(item => (
                 <NavLink key={item.href} href={item.href} label={item.label} icon={item.icon} variant="menu" match={item.match} onClick={() => setMobileMenuOpen(false)} />
@@ -71,7 +74,6 @@ export default function AppShell({ children, userEmail, inboxAddress }: AppShell
                   <p className="mt-1 break-all font-mono text-xs text-slate-800">{inboxAddress}</p>
                 </div>
               )}
-              <InstallPrompt />
               <div className="flex items-center justify-between">
                 <span className="max-w-[70%] truncate text-xs text-slate-500">{userEmail}</span>
                 <SignOutButton />
@@ -81,7 +83,7 @@ export default function AppShell({ children, userEmail, inboxAddress }: AppShell
         )}
       </header>
 
-      <div className="mx-auto flex min-h-screen max-w-[1600px]">
+      <div className="mx-auto flex min-h-screen w-full max-w-[1600px] overflow-x-hidden">
         <aside className="hidden w-72 shrink-0 border-r border-brand-900/10 bg-brand-700/95 text-white md:flex md:flex-col md:sticky md:top-0 md:h-screen">
           <div className="px-6 py-6 border-b border-brand-600/80">
             <span className="text-2xl font-bold tracking-tight">BillFlow</span>
@@ -118,14 +120,14 @@ export default function AppShell({ children, userEmail, inboxAddress }: AppShell
           </div>
         </aside>
 
-        <main className="min-w-0 flex-1 pb-24 md:pb-0">
+        <main className="min-w-0 w-full flex-1 overflow-x-hidden pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-0">
           {children}
         </main>
       </div>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
         <div className="grid grid-cols-4">
-            {mobileNav.map(item => (
+          {mobileNav.map(item => (
             <NavLink key={item.href} href={item.href} label={item.label} icon={item.icon} variant="mobile" match={item.match} onClick={() => setMobileMenuOpen(false)} />
           ))}
         </div>

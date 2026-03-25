@@ -59,7 +59,13 @@ export default function PushNotificationSettings({
 
       const keyRes = await fetch('/api/push/public-key')
       const keyBody = await keyRes.json()
-      if (!keyRes.ok) throw new Error(keyBody.error || 'Failed to fetch public key')
+      if (!keyRes.ok) {
+        throw new Error(
+          keyRes.status === 503
+            ? 'Push is not configured in this environment. Add VAPID keys first.'
+            : keyBody.error || 'Failed to fetch public key'
+        )
+      }
 
       const existing = await registration.pushManager.getSubscription()
       const subscription = existing ?? await registration.pushManager.subscribe({
@@ -152,7 +158,7 @@ export default function PushNotificationSettings({
       <div>
         <p className="text-sm font-medium text-gray-900">Phone notifications</p>
         <p className="text-xs text-gray-500 mt-1 leading-5">
-          Enable browser push after installing BillFlow to your home screen.
+          Enable browser push after installing BillFlow to your home screen. This local environment also needs VAPID keys configured.
         </p>
       </div>
 
