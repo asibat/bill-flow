@@ -35,7 +35,7 @@ export const claudeProvider: ExtractionProvider = {
     console.log('[extraction:claude] extractFromText called, input length:', text.length)
     try {
       const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-5',
+        model: 'claude-sonnet-4-6',
         max_tokens: 1024,
         system: buildExtractionSystemPrompt(options),
         tools: [EXTRACTION_TOOL],
@@ -53,7 +53,7 @@ export const claudeProvider: ExtractionProvider = {
     console.log('[extraction:claude] extractFromImage called, mimeType:', mimeType)
     try {
       const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-5',
+        model: 'claude-sonnet-4-6',
         max_tokens: 1024,
         system: buildExtractionSystemPrompt(options),
         tools: [EXTRACTION_TOOL],
@@ -80,7 +80,7 @@ export const claudeProvider: ExtractionProvider = {
     console.log('[extraction:claude] extractFromDocument called, mimeType:', mimeType)
     try {
       const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-5',
+        model: 'claude-sonnet-4-6',
         max_tokens: 1024,
         system: buildExtractionSystemPrompt(options),
         tools: [EXTRACTION_TOOL],
