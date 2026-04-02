@@ -21,8 +21,8 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: test-service-role-key
       NEXT_PUBLIC_APP_URL: https://example.vercel.app
       SUPABASE_STORAGE_BUCKET: bill-documents
-      EXTRACTION_PROVIDER: gemini
-      GEMINI_API_KEY: test-gemini-key
+      EXTRACTION_PROVIDER: claude
+      ANTHROPIC_API_KEY: test-anthropic-key
       CRON_SECRET: test-cron-secret
 
     steps:
