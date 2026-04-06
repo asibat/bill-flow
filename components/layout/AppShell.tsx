@@ -9,14 +9,16 @@ interface AppShellProps {
   children: React.ReactNode
   userEmail: string
   inboxAddress?: string | null
+  showSpending?: boolean
 }
 
-const primaryNav = [
+const baseNav = [
   { href: '/dashboard', label: 'Dashboard', icon: '📊', match: 'exact' as const },
   { href: '/bills', label: 'Bills', icon: '📄', match: 'section' as const },
   { href: '/vendors', label: 'Vendors', icon: '🏢', match: 'section' as const },
   { href: '/dashboard/settings', label: 'Settings', icon: '⚙️', match: 'exact' as const },
 ]
+const spendingNavItem = { href: '/spending', label: 'Spending', icon: '💸', match: 'section' as const }
 
 const actionNav = [
   { href: '/bills/new', label: 'Add Bill', icon: '➕', match: 'exact' as const },
@@ -30,8 +32,11 @@ const mobileNav = [
   { href: '/bills/batch', label: 'Pay', icon: '💳', match: 'exact' as const },
 ]
 
-export default function AppShell({ children, userEmail, inboxAddress }: AppShellProps) {
+export default function AppShell({ children, userEmail, inboxAddress, showSpending }: AppShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const primaryNav = showSpending
+    ? [...baseNav.slice(0, 2), spendingNavItem, ...baseNav.slice(2)]
+    : baseNav
 
   return (
     <div className="min-h-screen w-full overflow-x-hidden bg-[radial-gradient(circle_at_top_left,_rgba(29,78,216,0.08),_transparent_35%),linear-gradient(to_bottom,_#f8fafc,_#f3f4f6)]">

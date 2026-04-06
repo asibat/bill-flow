@@ -1,9 +1,11 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
+import { redirect, notFound } from 'next/navigation'
 import { isFeatureEnabled } from '@/lib/features'
 import AppShell from '@/components/layout/AppShell'
 
-export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default async function SpendingLayout({ children }: { children: React.ReactNode }) {
+  if (!isFeatureEnabled('SPENDING_ANALYSIS')) notFound()
+
   const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
@@ -17,11 +19,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (settings && !settings.onboarding_completed) redirect('/onboarding')
 
   return (
-    <AppShell
-      userEmail={user.email!}
-      inboxAddress={settings?.email_inbox_address}
-      showSpending={isFeatureEnabled('SPENDING_ANALYSIS')}
-    >
+    <AppShell userEmail={user.email!} inboxAddress={settings?.email_inbox_address} showSpending>
       {children}
     </AppShell>
   )

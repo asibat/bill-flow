@@ -7,6 +7,7 @@
 
 const FEATURE_DEFAULTS: Record<string, boolean> = {
   DASHBOARD_ANALYTICS: false,
+  SPENDING_ANALYSIS: false,
 }
 
 /**
